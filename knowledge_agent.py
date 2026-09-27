@@ -201,6 +201,12 @@ def build_context_text(chunks):
     return "\n\n---\n\n".join(context_parts)
 
 
+DISCLAIMER = (
+    "Disclaimer: This is general self-care information, not a medical diagnosis. "
+    "Please consult a doctor for medical advice."
+)
+
+
 #Knowledge Agent
 def knowledge_agent(state: UserState):
 
@@ -212,7 +218,9 @@ def knowledge_agent(state: UserState):
 
     Rules:
     - Do not give a diagnosis.
-    - Give general self-care guidance and clearly say when to see a doctor.
+    - Give general self-care guidance.
+    - End with one line on when to see a doctor
+      (e.g. "See a doctor if the fever gets worse or lasts more than 3 days.").
     - Do not recommend prescription medicines (e.g. antibiotics) or give doses;
       point the user to a doctor or pharmacist instead.
     - Cite the context you used as [1], [2], etc.
@@ -238,5 +246,5 @@ def knowledge_agent(state: UserState):
     sources = "\n".join(source_lines)
 
     return {
-        "result": response.content + "\n\nSources:\n" + sources
+        "result": response.content + "\n\n" + DISCLAIMER + "\n\nSources:\n" + sources
     }

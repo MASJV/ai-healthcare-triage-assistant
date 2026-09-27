@@ -7,3 +7,4 @@ download_health_docs.py
 health_docs_clean/
 chroma_db/
 .deepeval/
+fixes.md

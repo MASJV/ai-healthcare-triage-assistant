@@ -27,10 +27,12 @@ def router_agent(state: UserState):
     }
 
 
-#Conditional Function
 def route(state: UserState):
 
     if state["intent"] == "booking":
         return "Scheduling Agent"
+
+    if state["intent"] == "symptom":
+        return "Triage Agent"
 
     return "Knowledge Agent"

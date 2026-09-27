@@ -5,4 +5,6 @@ from typing import TypedDict
 class UserState(TypedDict):
     user_input: str
     intent: str
+    urgency: str
+    triage_reason: str
     result: str

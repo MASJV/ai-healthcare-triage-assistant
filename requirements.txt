@@ -1,6 +1,7 @@
 langgraph>=0.2.0
 langchain-openai>=0.2.0
 python-dotenv>=1.0.0
+grandalf>=0.8
 openai
 chromadb
 rank-bm25

@@ -2,6 +2,7 @@ from langgraph.graph import StateGraph, START, END
 
 from state import UserState
 from router_agent import router_agent, route
+from triage_agent import triage_agent, triage_route
 from knowledge_agent import knowledge_agent
 from scheduling_agent import scheduling_agent
 
@@ -10,6 +11,7 @@ from scheduling_agent import scheduling_agent
 graph = StateGraph(UserState)
 
 graph.add_node("Router Agent", router_agent)
+graph.add_node("Triage Agent", triage_agent)
 graph.add_node("Knowledge Agent", knowledge_agent)
 graph.add_node("Scheduling Agent", scheduling_agent)
 
@@ -19,8 +21,18 @@ graph.add_conditional_edges(
     "Router Agent",
     route,
     {
+        "Triage Agent": "Triage Agent",
         "Knowledge Agent": "Knowledge Agent",
         "Scheduling Agent": "Scheduling Agent"
+    }
+)
+
+graph.add_conditional_edges(
+    "Triage Agent",
+    triage_route,
+    {
+        "Scheduling Agent": "Scheduling Agent",
+        "Escalation Agent": END   # TODO: point to Escalation Agent once it is built
     }
 )
 
@@ -48,7 +60,10 @@ if __name__ == "__main__":
 
         print("\n========== RESULT ==========\n")
         print("Intent:", result["intent"])
-        print(result["result"])
+        if "urgency" in result:
+            print("Urgency:", result["urgency"], "-", result["triage_reason"])
+        if "result" in result:
+            print(result["result"])
 
     print("\nGraph Structure:\n")
-    print(app.get_graph().draw_mermaid())
+    print(app.get_graph().draw_ascii())
