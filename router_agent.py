@@ -1,17 +1,35 @@
-from state import UserState
+from langchain_core.messages import AIMessage
+
+from state import UserState, format_history
 from config import llm
+
+
+OTHER_REPLY = (
+    "I can help with health symptoms, self-care questions and doctor appointments. "
+    "Please tell me about a symptom or what you need."
+)
 
 
 #Router Agent
 def router_agent(state: UserState):
 
-    prompt = f"""
-    User Message: {state['user_input']}
+    # every message except the one being classified now
+    history = format_history(state["messages"][:-1])
 
-    Classify the intent of the user message into exactly one of these labels:
+    prompt = f"""
+    Conversation so far:
+    {history}
+
+    Latest User Message: {state['user_input']}
+
+    Classify the intent of the latest user message into exactly one of these labels:
     symptom   - user is describing symptoms or asking what they might mean
     self_care - user is asking for home care or self-care advice
     booking   - user wants to book, reschedule or cancel an appointment
+    other     - not related to health or appointments
+
+    If the assistant just asked a follow-up question about symptoms and the
+    user is answering it, the label is symptom.
 
     Reply with only the label, nothing else.
     """
@@ -19,8 +37,15 @@ def router_agent(state: UserState):
     response = llm.invoke(prompt)
     intent = response.content.strip().lower()
 
-    if intent not in ["symptom", "self_care", "booking"]:
+    if intent not in ["symptom", "self_care", "booking", "other"]:
         intent = "symptom"
+
+    if intent == "other":
+        return {
+            "intent": intent,
+            "result": OTHER_REPLY,
+            "messages": [AIMessage(content=OTHER_REPLY)]
+        }
 
     return {
         "intent": intent
@@ -34,5 +59,8 @@ def route(state: UserState):
 
     if state["intent"] == "symptom":
         return "Triage Agent"
+
+    if state["intent"] == "other":
+        return "End"
 
     return "Knowledge Agent"

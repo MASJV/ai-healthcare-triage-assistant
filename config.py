@@ -13,7 +13,7 @@ from langchain_openai import ChatOpenAI
 load_dotenv(override=True)
 
 # --- Models ---
-CHAT_MODEL = "gpt-4.1-mini"
+CHAT_MODEL = "gpt-4o-mini"
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 512   # smaller vectors keep local storage small
 
@@ -29,6 +29,9 @@ TOP_K_VECTOR = 10   # how many chunks to get from vector search
 TOP_K_BM25 = 10     # how many chunks to get from keyword search
 TOP_K_FINAL = 4     # how many chunks to keep after reranking
 RRF_K = 60          # standard Reciprocal Rank Fusion constant
+
+# --- Triage settings ---
+MAX_FOLLOW_UPS = 2  # follow-up questions triage may ask before it must decide
 
 # --- Storage settings ---
 DOCS_FOLDER = "health_docs_clean/health_docs_clean"

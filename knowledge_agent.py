@@ -10,6 +10,7 @@ Reads the Chroma collection built by ingest.py. Run `python ingest.py` first.
 import re
 
 import chromadb
+from langchain_core.messages import AIMessage
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -18,7 +19,6 @@ import config
 from state import UserState
 
 
-# --- Load once when the graph starts ---
 openai_client = OpenAI()
 
 chroma_client = chromadb.PersistentClient(path=config.CHROMA_DIRECTORY)
@@ -27,9 +27,9 @@ try:
 except Exception:
     raise RuntimeError("Knowledge base not found. Run `python ingest.py` first.")
 
-# all chunks, kept in memory for BM25 keyword search
 stored = collection.get(include=["documents", "metadatas"])
 all_chunks = []
+
 for i in range(len(stored["ids"])):
     all_chunks.append({
         "id": stored["ids"][i],
@@ -39,7 +39,6 @@ for i in range(len(stored["ids"])):
         "url": stored["metadatas"][i]["url"]
     })
 
-# downloads the model once and keeps it in memory
 reranker_model = CrossEncoder(config.RERANKER_MODEL)
 
 
@@ -245,6 +244,9 @@ def knowledge_agent(state: UserState):
         source_lines.append(f"[{number}] {chunk_info['title']} - {chunk_info['url']}")
     sources = "\n".join(source_lines)
 
+    answer = response.content + "\n\n" + DISCLAIMER + "\n\nSources:\n" + sources
+
     return {
-        "result": response.content + "\n\n" + DISCLAIMER + "\n\nSources:\n" + sources
+        "result": answer,
+        "messages": [AIMessage(content=answer)]
     }

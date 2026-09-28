@@ -1,3 +1,7 @@
+import uuid
+
+from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
 
 from state import UserState
@@ -23,7 +27,8 @@ graph.add_conditional_edges(
     {
         "Triage Agent": "Triage Agent",
         "Knowledge Agent": "Knowledge Agent",
-        "Scheduling Agent": "Scheduling Agent"
+        "Scheduling Agent": "Scheduling Agent",
+        "End": END
     }
 )
 
@@ -32,18 +37,24 @@ graph.add_conditional_edges(
     triage_route,
     {
         "Scheduling Agent": "Scheduling Agent",
-        "Escalation Agent": END   # TODO: point to Escalation Agent once it is built
+        "Escalation Agent": END,   # point to Escalation Agent once built
+        "Ask User": END           
     }
 )
 
 graph.add_edge("Knowledge Agent", END)
 graph.add_edge("Scheduling Agent", END)
 
-app = graph.compile()
+# MemorySaver keeps the state of each chat session in memory, keyed by thread_id
+memory = MemorySaver()
+app = graph.compile(checkpointer=memory)
 
 
 #Chat Loop
 if __name__ == "__main__":
+
+    # one thread_id per run per chat session
+    session = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
     while True:
 
@@ -52,17 +63,24 @@ if __name__ == "__main__":
         if user_input.lower() == "exit":
             break
 
+        # per-turn fields are reset; messages and follow_ups carry over
         result = app.invoke(
             {
-                "user_input": user_input
-            }
+                "user_input": user_input,
+                "messages": [HumanMessage(content=user_input)],
+                "intent": "",
+                "urgency": "",
+                "triage_reason": "",
+                "result": ""
+            },
+            session
         )
 
         print("\n========== RESULT ==========\n")
         print("Intent:", result["intent"])
-        if "urgency" in result:
+        if result["urgency"]:
             print("Urgency:", result["urgency"], "-", result["triage_reason"])
-        if "result" in result:
+        if result["result"]:
             print(result["result"])
 
     print("\nGraph Structure:\n")
