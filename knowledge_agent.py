@@ -213,13 +213,17 @@ def knowledge_agent(state: UserState):
 
     prompt = f"""
     You are a healthcare self-care information assistant.
-    Answer the user's message using only the context below.
+    Answer the user's message strictly from the context below.
 
     Rules:
+    - Use only facts stated in the context. Do not add advice, facts,
+      numbers or home remedies from your own knowledge, even if you think
+      they are correct.
+    - Every sentence of guidance must be supported by the context and cited.
     - Do not give a diagnosis.
-    - Give general self-care guidance.
-    - End with one line on when to see a doctor
-      (e.g. "See a doctor if the fever gets worse or lasts more than 3 days.").
+    - End with one line on when to see a doctor, taken from the context.
+      If the context does not say, write: "See a doctor if your symptoms
+      get worse or do not improve."
     - Do not recommend prescription medicines (e.g. antibiotics) or give doses;
       point the user to a doctor or pharmacist instead.
     - Cite the context you used as [1], [2], etc.
@@ -244,7 +248,7 @@ def knowledge_agent(state: UserState):
         source_lines.append(f"[{number}] {chunk_info['title']} - {chunk_info['url']}")
     sources = "\n".join(source_lines)
 
-    answer = response.content + "\n\n" + DISCLAIMER + "\n\nSources:\n" + sources
+    answer = f"{response.content}\n\n{DISCLAIMER}\n\nSources:\n{sources}"
 
     return {
         "result": answer,

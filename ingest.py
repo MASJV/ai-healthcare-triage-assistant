@@ -116,7 +116,10 @@ def chunk_documents(documents, chunk_size, overlap):
                     current = ""
                 text_chunks.extend(chunk_text(section, chunk_size, overlap))
             elif len(current) + len(section) + 2 <= chunk_size:
-                current = current + "\n\n" + section if current else section
+                if current:
+                    current = f"{current}\n\n{section}"
+                else:
+                    current = section
             else:
                 text_chunks.append(current)
                 current = section
@@ -126,8 +129,8 @@ def chunk_documents(documents, chunk_size, overlap):
 
         for text_chunk in text_chunks:
             chunk_info = {
-                "id": "chunk_" + str(chunk_number),
-                "text": document["title"] + "\n\n" + text_chunk,
+                "id": f"chunk_{chunk_number}",
+                "text": f"{document['title']}\n\n{text_chunk}",
                 "title": document["title"],
                 "source": document["source"],
                 "url": document["url"]

@@ -27,7 +27,7 @@ def check_red_flags(user_input):
     message = user_input.lower()
 
     for keyword in EMERGENCY_KEYWORDS:
-        pattern = r"\b" + re.escape(keyword)
+        pattern = rf"\b{re.escape(keyword)}"
         if re.search(pattern, message):
             return keyword
 

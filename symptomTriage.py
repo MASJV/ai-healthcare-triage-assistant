@@ -9,6 +9,7 @@ from router_agent import router_agent, route
 from triage_agent import triage_agent, triage_route
 from knowledge_agent import knowledge_agent
 from scheduling_agent import scheduling_agent
+from escalation_agent import escalation_agent
 
 
 #Build Graph
@@ -18,6 +19,7 @@ graph.add_node("Router Agent", router_agent)
 graph.add_node("Triage Agent", triage_agent)
 graph.add_node("Knowledge Agent", knowledge_agent)
 graph.add_node("Scheduling Agent", scheduling_agent)
+graph.add_node("Escalation Agent", escalation_agent)
 
 graph.add_edge(START, "Router Agent")
 
@@ -37,13 +39,14 @@ graph.add_conditional_edges(
     triage_route,
     {
         "Scheduling Agent": "Scheduling Agent",
-        "Escalation Agent": END,   # point to Escalation Agent once built
+        "Escalation Agent": "Escalation Agent",
         "Ask User": END           
     }
 )
 
 graph.add_edge("Knowledge Agent", END)
 graph.add_edge("Scheduling Agent", END)
+graph.add_edge("Escalation Agent", END)
 
 # MemorySaver keeps the state of each chat session in memory, keyed by thread_id
 memory = MemorySaver()

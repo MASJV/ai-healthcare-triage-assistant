@@ -25,9 +25,9 @@ def format_history(messages):
     lines = []
     for message in messages:
         if isinstance(message, HumanMessage):
-            lines.append("User: " + message.content)
+            lines.append(f"User: {message.content}")
         else:
-            lines.append("Assistant: " + message.content)
+            lines.append(f"Assistant: {message.content}")
 
     if not lines:
         return "(no earlier messages)"
