@@ -2,6 +2,7 @@ from langchain_core.messages import AIMessage
 
 from state import UserState, format_history
 from config import llm
+from triage_agent import check_red_flags
 
 
 OTHER_REPLY = (
@@ -30,6 +31,10 @@ def router_agent(state: UserState):
 
     If the assistant just asked a follow-up question about symptoms and the
     user is answering it, the label is symptom.
+    If the assistant just asked about an appointment (name, slot) and the
+    user is answering it, the label is booking.
+    If the message describes a symptom, the label is symptom, even if the
+    user also asks for an appointment.
 
     Reply with only the label, nothing else.
     """
@@ -38,6 +43,10 @@ def router_agent(state: UserState):
     intent = response.content.strip().lower()
 
     if intent not in ["symptom", "self_care", "booking", "other"]:
+        intent = "symptom"
+
+    # red-flag symptoms always go through triage, whatever label the LLM picked
+    if check_red_flags(state["user_input"]) is not None:
         intent = "symptom"
 
     if intent == "other":

@@ -33,6 +33,15 @@ RRF_K = 60          # standard Reciprocal Rank Fusion constant
 # --- Triage settings ---
 MAX_FOLLOW_UPS = 2  # follow-up questions triage may ask before it must decide
 
+# --- Scheduling settings ---
+DB_PATH = "appointments.db"
+BOOKING_DAYS = 30    # users can book up to 30 days ahead
+URGENT_HOURS = 48    # urgent cases must be booked within 48 hours
+OPEN_HOUR = 8        # first slot at 8:00 AM
+CLOSE_HOUR = 22      # last slot ends at 10:00 PM
+SLOT_MINUTES = 30    # length of one appointment
+SHOW_HOURS = 24      # free slots of the next 24 hours are shown to the user
+
 # --- Storage settings ---
 DOCS_FOLDER = "health_docs_clean/health_docs_clean"
 CHROMA_DIRECTORY = "chroma_db"

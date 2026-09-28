@@ -12,6 +12,7 @@ class UserState(TypedDict):
     urgency: str
     triage_reason: str
     follow_ups: int  
+    booking_urgency: str   # urgency kept until the booking is done
     result: str
 
 
