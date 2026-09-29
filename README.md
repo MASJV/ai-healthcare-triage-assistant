@@ -23,7 +23,8 @@ flowchart TD
 
     T -->|emergency| X[Escalation Agent]
     T -->|urgent / routine| S
-    T -->|needs_more_info| E2([End: follow-up question])
+    T -->|needs_more_info| Q[Ask follow-up question]
+    Q -.->|user's answer, next turn| R
 
     K --> END([End])
     S --> END
@@ -140,8 +141,10 @@ symptom-triage-scheduler/
 ├── scheduling_agent.py    # SQLite appointment booking
 ├── ingest.py              # builds the Chroma vector store
 ├── eval_router.py         # runs the router evaluation and prints accuracy
+├── eval_triage.py         # runs the triage evaluation and prints accuracy
 ├── evaluation/
-│   └── router_test_cases.py   # 50 router test cases
+│   ├── router_test_cases.py   # 50 router test cases
+│   └── triage_test_cases.py   # 50 triage test cases
 ├── requirements.txt
 └── .env.example
 ```
@@ -275,6 +278,35 @@ Result with gpt-4o-mini: **48/50 (96.0%)**
 Known failures:
 - "What are some ways to lower my risk of a heart attack?" → `symptom`. The red-flag override is kept on purpose: sending a prevention question to triage is safer than missing an emergency.
 - "My dog has been vomiting since morning" → `symptom` instead of `other`.
+
+### Triage Agent
+
+`eval_triage.py` runs the real `triage_agent()` (keyword filter + LLM) on 50 test cases in `evaluation/triage_test_cases.py`. Each case sets how many follow-up questions were already asked, so the `MAX_FOLLOW_UPS` limit is tested too. Besides accuracy it counts under-triage (level lower than expected) and over-triage (level higher than expected).
+
+| Level | Cases | What they cover |
+|---|---|---|
+| emergency | 14 | heart attack, stroke, poisoning, bleeding and breathing signs worded so no red-flag keyword matches (13 of 14), infant fever, Hinglish, a follow-up answer that turns a case into an emergency |
+| urgent | 13 | infections, dehydration, possible fracture, worsening asthma, high blood sugar, answers to follow-up questions, follow-up limit reached |
+| routine | 12 | cold, refill, check-up, minor aches, a follow-up answer that rules out danger, "swallowed my chewing gum" |
+| needs_more_info | 11 | vague messages such as "he hit his head", "I feel weird", "rash" |
+
+```bash
+python eval_triage.py
+```
+
+Result with gpt-4o-mini: **46/50 (92.0%)**, under-triage 0, over-triage 3
+
+| Level | Accuracy |
+|---|---|
+| emergency | 13/14 (92.9%) |
+| urgent | 11/13 (84.6%) |
+| routine | 11/12 (91.7%) |
+| needs_more_info | 11/11 (100%) |
+
+Known failures:
+- "the worst headache of my life came on suddenly a few minutes ago" → `needs_more_info` instead of `emergency`. The under-triage count leaves out `needs_more_info`, so this missed emergency is not in it.
+- Dehydration ("can barely keep water down") and high blood sugar → `emergency` instead of `urgent` (over-triage, the safe direction).
+- "I accidentally swallowed my chewing gum" → `emergency`. The keyword "swallowed" forces it; kept on purpose, like the router override.
 
 ---
 
