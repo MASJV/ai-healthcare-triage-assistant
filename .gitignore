@@ -10,3 +10,4 @@ chroma_db/
 fixes.md
 data_sourcing.md
 appointments.db
+evaluation/__pycache__

@@ -127,7 +127,11 @@ FIRST_AID = [
     {
         "category": "suicide",
         "description": "suicidal thoughts, wanting to die or not wanting to live, self-harm",
-        "keywords": ["suicide", "kill myself", "end my life"],
+        "keywords": [
+            "suicide", "kill myself", "end my life",
+            "want to die", "don't want to live", "dont want to live",
+            "no reason to live", "no point in going on"
+        ],
         "steps": [
             "Do not leave the person alone.",
             "Remove anything they could use to harm themselves, if it is safe to do so.",

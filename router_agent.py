@@ -24,17 +24,29 @@ def router_agent(state: UserState):
     Latest User Message: {state['user_input']}
 
     Classify the intent of the latest user message into exactly one of these labels:
-    symptom   - user is describing symptoms or asking what they might mean
-    self_care - user is asking for home care or self-care advice
-    booking   - user wants to book, reschedule or cancel an appointment
-    other     - not related to health or appointments
+    symptom   - a person is describing their own or someone else's symptoms,
+                or asking what they might mean. This includes emotional
+                distress, hopelessness and sleep or mood problems.
+    self_care - a general question about human health: home care, first aid
+                for minor problems, diet, prevention, or how an illness works
+                (e.g. "how is a migraine different from a headache?")
+    booking   - user wants to book, reschedule, cancel or check a doctor's
+                appointment
+    other     - anything that is not about a person's health or a doctor's
+                appointment: animals, plants, devices, vehicles, travel or
+                ticket bookings, subscriptions, greetings, jokes, general
+                knowledge
 
-    If the assistant just asked a follow-up question about symptoms and the
-    user is answering it, the label is symptom.
-    If the assistant just asked about an appointment (name, slot) and the
-    user is answering it, the label is booking.
-    If the message describes a symptom, the label is symptom, even if the
-    user also asks for an appointment.
+    Rules, in order of priority:
+    1. If the message describes a symptom, the label is symptom, even if the
+       user also asks to see a doctor or book an appointment
+       (e.g. "my knee has been swollen for days, I need a doctor" -> symptom).
+    2. If the assistant just asked a follow-up question about symptoms and the
+       user is answering it, the label is symptom.
+    3. If the assistant just asked about an appointment (name, phone, slot)
+       and the user is answering it, the label is booking.
+    4. Words like "book", "cancel" or "fix" only mean booking or self_care
+       when they are about a doctor's appointment or a person's health.
 
     Reply with only the label, nothing else.
     """

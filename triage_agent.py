@@ -17,7 +17,9 @@ EMERGENCY_KEYWORDS = [
     "severe burn", "head injury", "snake bite",
     "poisoning", "overdose", "swallowed",
     "throat swelling", "tongue swelling",
-    "suicide", "kill myself", "end my life"
+    "suicide", "kill myself", "end my life",
+    "want to die", "don't want to live", "dont want to live",
+    "no reason to live", "no point in going on"
 ]
 
 

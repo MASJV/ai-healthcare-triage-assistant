@@ -139,6 +139,9 @@ symptom-triage-scheduler/
 ├── knowledge_agent.py     # hybrid RAG answers with citations
 ├── scheduling_agent.py    # SQLite appointment booking
 ├── ingest.py              # builds the Chroma vector store
+├── eval_router.py         # runs the router evaluation and prints accuracy
+├── evaluation/
+│   └── router_test_cases.py   # 50 router test cases
 ├── requirements.txt
 └── .env.example
 ```
@@ -240,6 +243,38 @@ Settings live in `config.py`:
 | Self-care answers go beyond the sources | The prompt allows only facts from the retrieved documents, with citations; no prescription medicines or doses |
 | Answers are read as medical advice | Every knowledge answer ends with a fixed disclaimer and a when-to-see-a-doctor line |
 | Urgent patients get no appointment | If no slot is free within 48 hours, the earliest regular slots are offered with advice to go to a hospital if symptoms worsen |
+
+---
+
+## Evaluation
+
+### Router Agent
+
+`eval_router.py` runs the real `router_agent()` (LLM label + red-flag override) on 50 test cases in `evaluation/router_test_cases.py` and prints overall and per-label accuracy, plus every wrong case.
+
+| Label | Cases | What they cover |
+|---|---|---|
+| symptom | 14 | third person, typos, Hinglish, mental health, answers to triage follow-up questions, new symptom after a booking |
+| self_care | 12 | home care, diet, prevention, general health questions, follow-up on a self-care answer |
+| booking | 12 | book, reschedule, cancel, check, answers to name/phone/slot questions, switching from triage to cancel |
+| other | 12 | greetings, coding, pets, plants, devices, "book a flight", "cancel Netflix", prompt injection |
+
+```bash
+python eval_router.py
+```
+
+Result with gpt-4o-mini: **48/50 (96.0%)**
+
+| Label | Accuracy |
+|---|---|
+| symptom | 14/14 (100%) |
+| self_care | 11/12 (91.7%) |
+| booking | 12/12 (100%) |
+| other | 11/12 (91.7%) |
+
+Known failures:
+- "What are some ways to lower my risk of a heart attack?" → `symptom`. The red-flag override is kept on purpose: sending a prevention question to triage is safer than missing an emergency.
+- "My dog has been vomiting since morning" → `symptom` instead of `other`.
 
 ---
 
