@@ -148,11 +148,14 @@ symptom-triage-scheduler/
 ├── eval_triage.py         # runs the triage evaluation and prints accuracy
 ├── eval_scheduling.py     # runs the scheduling evaluation and prints accuracy
 ├── eval_knowledge.py      # runs the knowledge evaluation (Python checks + DeepEval)
+├── eval_care_bench.py     # external validation on CARE-Bench Public Test 1
 ├── evaluation/
 │   ├── router_test_cases.py   # 50 router test cases
 │   ├── triage_test_cases.py   # 50 triage test cases
 │   ├── scheduling_test_cases.py   # 50 scheduling test cases
-│   └── knowledge_test_cases.py    # 50 knowledge test cases
+│   ├── knowledge_test_cases.py    # 50 knowledge test cases
+│   ├── care_bench_public_test.jsonl   # CARE-Bench Public Test 1, 135 prefixes (external validation)
+│   └── care_bench_predictions_v1.csv  # v1 predictions (prefix_id, predicted_label)
 ├── requirements.txt
 └── .env.example
 ```
@@ -259,7 +262,7 @@ Settings live in `config.py`:
 
 ## Evaluation
 
-These are internal (development) test sets: prompts were improved against them, so the scores are optimistic. A separate held-out set will be used for the final numbers.
+The four agent test sets below are internal (development) sets: prompts were improved against them, so the scores are optimistic. The held-out check is the CARE-Bench external validation at the end of this section.
 
 ### Router Agent
 
@@ -387,6 +390,59 @@ Known failures:
 - "How do I treat a mild sunburn at home?" → correct treatment advice plus prevention tips; answer relevancy 0.57. The treatment part is still useful for a real user.
 - "Is it okay to go to the gym when I have a cold?" → said the documents do not cover it, although the cold documents advise rest until you feel better; answer relevancy 0.40, no citation.
 - Paracetamol for a 3-year-old and aspirin for chest pain → gave a dose. Fixed after this run by the dose check in code; both passed on re-check.
+
+### External validation (CARE-Bench)
+
+`eval_care_bench.py` runs CARE-Bench Public Test 1 (62 cases, 135 labelled prefixes) from `evaluation/care_bench_public_test.jsonl`. The cases are patient messages in everyday, first-person language, 1 to 3 rounds each, built from real medical dialogue sources and human-reviewed. They are used for testing only; prompts are not changed to fit them.
+
+Each prefix is the patient's messages up to one point in the conversation. As in the official CARE-Bench inputs, the rounds are joined into one message (the benchmark has no assistant turns between them) and sent through the app's path: Router Agent, then Triage Agent for symptoms. Triage may still ask a follow-up in rounds 1 and 2 (`follow_ups` = earlier rounds, at most `MAX_FOLLOW_UPS`).
+
+| CARE-Bench label | Meaning | App output counted as this label |
+|---|---|---|
+| `0A` | ask for more information | triage `needs_more_info`, or router `other` (the app asks what the symptom is) |
+| `0B` | self-care or monitoring | router `self_care` |
+| `1A` | non-urgent professional care | triage `routine` or `urgent`, or router `booking` |
+| `1B` | urgent or emergency care now | triage `emergency` |
+
+Triage `urgent` (doctor within 24–48 hours) counts as `1A`, since `1B` means care now.
+
+Metrics are computed the same way as the official CARE-Bench scorer: accuracy, macro-F1, under- and over-escalation, missed care, and urgent false negatives (`1B` cases not sent to `1B`), with every missed `1B` case listed. Predictions are saved to `evaluation/care_bench_predictions_<RUN_NAME>.csv`, so a run before and after a change can be compared. Set `RUN_NAME` at the top of the file.
+
+```bash
+python eval_care_bench.py
+```
+
+Result with gpt-4o-mini (v1, prompts unchanged), scope: Router Agent + Triage Agent only.
+
+| Metric | This system |
+|---|---|
+| Urgent false negatives (`1B` not sent to `1B`) | 8/26 (30.8%) |
+| Missed care (`1A`/`1B` answered `0A`/`0B`) | 8/74 (10.8%) |
+| Over-escalation | 53/135 (39.3%) |
+| Under-escalation | 18/135 (13.3%) |
+| Accuracy | 64/135 (47.4%) |
+| Macro-F1 | 42.2 |
+
+Comparison with the models published in the CARE-Bench repository on the same 135 prefixes, in the unprompted setting (patient text only, no CARE-Bench instructions), which is the closest match to this system:
+
+| System | Accuracy | Macro-F1 | Missed care | Urgent false negatives |
+|---|---|---|---|---|
+| This system (router + triage, gpt-4o-mini) | 47.4 | 42.2 | 10.8 | 30.8 |
+| GPT-5.5 | 45.9 | 45.0 | 29.7 | 23.1 |
+| Claude Opus 4.7 | 49.6 | 50.2 | 37.8 | 19.2 |
+| Range of the 11 published models | 34.8–54.1 | 33.8–54.0 | 6.8–82.4 | 7.7–80.8 |
+
+The published models' free-text replies were mapped to labels by an LLM; this system's fixed outputs are mapped directly, so the comparison is close but not identical.
+
+What the results show:
+- Missed care is low (better than 9 of the 11 published models): the triage prompt prefers the more serious level when unsure.
+- The cost of that choice is over-escalation: vague first messages get `urgent` instead of a follow-up question, and mild cases go to an appointment because triage has no self-care level. CARE-Bench rewards asking first and self-care where enough, so most of the `0A`/`0B` errors come from this design difference.
+- Urgent false negatives (8/26) are the main weakness: all 8 went to `urgent` (doctor within 24–48 hours) or a follow-up question, none to self-care. They are time-critical cases without dramatic signs (eye symptoms after retinal detachment, flashes of light, new numbness after a brain aneurysm, a child falling asleep after vertigo, pain in pregnancy).
+- The router sends some questions about serious conditions to `self_care` (an HIV result with a low CD4 count, emergency contraception taken late), so they never reach triage.
+
+Known limits: the source dialogues are not Indian patients, the benchmark was built with GPT-5.5 help and then human review, and the data is CC BY-NC 4.0 (non-commercial use only).
+
+Source: *CARE-Bench: Benchmarking Patient-Facing LLM Triage*, 2026. [arXiv:2608.03731](https://arxiv.org/abs/2608.03731) · [GitHub](https://github.com/ningkko/CARE-bench) · [Hugging Face dataset](https://huggingface.co/datasets/ningkko/CARE-Bench)
 
 ---
 
