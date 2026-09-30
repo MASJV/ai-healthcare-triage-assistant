@@ -62,21 +62,25 @@ The emergency type is found from all of the user's messages in the session in tw
 **The LLM never writes the advice.** Several types can match, and all their steps are shown. If nothing matches, general steps are used.
 
 ### Knowledge Agent (`knowledge_agent.py`)
-Hybrid retrieval over the health-document collection:
+Query expansion, then hybrid retrieval over the health-document collection:
 
 ```
-question ─┬─> vector search (Chroma, text-embedding-3-small, 512 dims) ─┐
-          └─> keyword search (BM25)                                    ─┴─> Reciprocal Rank Fusion (k = 60)
-              ─> BGE cross-encoder reranker (BAAI/bge-reranker-base, runs locally)
-              ─> top 4 chunks ─> LLM answer with [1]–[4] citations
+question ─> + up to 5 medical terms from the LLM (e.g. "piles" -> hemorrhoids)
+search query ─┬─> vector search (Chroma, text-embedding-3-small, 1536 dims) ─┐
+              └─> keyword search (BM25)                                     ─┴─> Reciprocal Rank Fusion (k = 60)
+                  ─> BGE cross-encoder reranker (BAAI/bge-reranker-base, runs locally)
+                  ─> top 4 chunks ─> LLM answer to the original question, with [1]–[4] citations
 ```
 
-- The prompt restricts the model to facts stated in the retrieved context. It must cite what it uses and say when the documents do not cover the question.
-- It gives no diagnosis and no prescription medicines or doses, and it replaces UK emergency numbers with Indian ones (112/108).
+- Query expansion keeps the user's words and adds medical terms, so everyday wording still finds the right documents. If that LLM call fails, the original question is searched alone.
+- The prompt restricts the model to facts stated in the retrieved context and to information that answers the question. It must cite what it uses and say when the documents do not cover the question.
+- It gives no diagnosis, no prescription medicines and no dose of any medicine (over-the-counter included), and it replaces UK emergency numbers with Indian ones (112/108).
+- A check in code backs up the prompt: any sentence that still contains a medicine dose (tablets, capsules, drops, or mg/ml next to a medicine name) is removed and replaced with a line to ask a doctor or pharmacist. Food and drink amounts such as "2,000 ml of water" are left alone.
 - Every answer ends with a when-to-see-a-doctor line, a fixed disclaimer added in code, and the source titles with URLs.
 
 ### Scheduling Agent (`scheduling_agent.py`)
-- The LLM only extracts five fields from the conversation: action (book / reschedule / cancel / check), full name, phone, date and time. It gets today's date so it can turn words like "tomorrow" into real dates.
+- The LLM only extracts five fields from the conversation: action (book / reschedule / cancel / check / none), full name, phone, date and time. It gets today's date and the dates of the next 7 days, so it can turn words like "tomorrow" or "Friday" into real dates.
+- When triage sends a message here in the same turn and no date and time have been given yet, the action is set to `none` in code, so the patient is shown the free slots (with the 48-hour advice for urgent cases) instead of being asked for their details first.
 - Every rule check and database change is done in Python:
 
 | Rule | Value (`config.py`) |
@@ -142,14 +146,18 @@ symptom-triage-scheduler/
 ├── ingest.py              # builds the Chroma vector store
 ├── eval_router.py         # runs the router evaluation and prints accuracy
 ├── eval_triage.py         # runs the triage evaluation and prints accuracy
+├── eval_scheduling.py     # runs the scheduling evaluation and prints accuracy
+├── eval_knowledge.py      # runs the knowledge evaluation (Python checks + DeepEval)
 ├── evaluation/
 │   ├── router_test_cases.py   # 50 router test cases
-│   └── triage_test_cases.py   # 50 triage test cases
+│   ├── triage_test_cases.py   # 50 triage test cases
+│   ├── scheduling_test_cases.py   # 50 scheduling test cases
+│   └── knowledge_test_cases.py    # 50 knowledge test cases
 ├── requirements.txt
 └── .env.example
 ```
 
-Created at runtime (git-ignored): `chroma_db/`, `appointments.db`, `.env`.
+Created at runtime (git-ignored): `chroma_db/`, `appointments.db`, and `.deepeval/` (DeepEval's local run data). `.env` is created by you from `.env.example` and is also git-ignored.
 
 ---
 
@@ -226,7 +234,7 @@ Settings live in `config.py`:
 
 | Group | Settings |
 |---|---|
-| Models | `CHAT_MODEL` (gpt-4o-mini), `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `RERANKER_MODEL` |
+| Models | `CHAT_MODEL` (gpt-4o-mini), `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `RERANKER_MODEL`, `JUDGE_MODEL` (gpt-4.1-mini, evaluation only) |
 | Chunking | `CHUNK_SIZE`, `CHUNK_OVERLAP` |
 | Retrieval | `TOP_K_VECTOR`, `TOP_K_BM25`, `TOP_K_FINAL`, `RRF_K` |
 | Triage | `MAX_FOLLOW_UPS` |
@@ -243,13 +251,15 @@ Settings live in `config.py`:
 | An emergency message is labelled as a booking | The router re-checks every message against the red-flag keywords and forces triage |
 | A vague symptom is rated from too little information | Triage asks up to 2 follow-up questions about danger signs before deciding |
 | The LLM writes wrong emergency advice | Emergency steps are fixed text from `FIRST_AID`; the LLM only picks category names, and unknown names are dropped |
-| Self-care answers go beyond the sources | The prompt allows only facts from the retrieved documents, with citations; no prescription medicines or doses |
+| Self-care answers go beyond the sources | The prompt allows only facts from the retrieved documents, with citations; no prescription medicines and no medicine doses, even when the documents contain one |
 | Answers are read as medical advice | Every knowledge answer ends with a fixed disclaimer and a when-to-see-a-doctor line |
 | Urgent patients get no appointment | If no slot is free within 48 hours, the earliest regular slots are offered with advice to go to a hospital if symptoms worsen |
 
 ---
 
 ## Evaluation
+
+These are internal (development) test sets: prompts were improved against them, so the scores are optimistic. A separate held-out set will be used for the final numbers.
 
 ### Router Agent
 
@@ -308,6 +318,76 @@ Known failures:
 - Dehydration ("can barely keep water down") and high blood sugar → `emergency` instead of `urgent` (over-triage, the safe direction).
 - "I accidentally swallowed my chewing gum" → `emergency`. The keyword "swallowed" forces it; kept on purpose, like the router override.
 
+### Scheduling Agent
+
+`eval_scheduling.py` runs the LLM step of the scheduling agent (`read_request()`) on 50 test cases in `evaluation/scheduling_test_cases.py`. Only the field extraction is tested, so `appointments.db` is never read or changed; the booking rules are plain Python. A case passes only if all five fields (action, name, phone, date, time) are right. Phones are cleaned with `clean_phone()` and times written as HH:MM before comparing, the same way the agent does before booking. Dates are worked out from the day the test runs, so "tomorrow" always means the real tomorrow, and no case asks for a time later today, so the result does not depend on the hour.
+
+| Action | Cases | What they cover |
+|---|---|---|
+| book | 16 | relative and written dates, 12-hour times, times in words, Hinglish, phones with +91/spaces/dashes, vague times that must not be guessed, picking an offered slot, correcting the time |
+| reschedule | 8 | "prepone", old and new day in one message, only the time changing, Hinglish |
+| cancel | 8 | cancel without the word, switching from booking to cancel, cancelling for someone else |
+| check | 8 | indirect questions, Hinglish, check without details |
+| none | 10 | symptom messages sent on by triage before any appointment request |
+
+```bash
+python eval_scheduling.py
+```
+
+Result with gpt-4o-mini: **48/50 (96.0%)**
+
+| Field | Accuracy |
+|---|---|
+| action | 50/50 (100%) |
+| name | 50/50 (100%) |
+| phone | 50/50 (100%) |
+| date | 49/50 (98%) |
+| time | 49/50 (98%) |
+
+The 10 `none` cases carry the urgency triage would have given, as in the app, so the from-triage rule in `read_request()` is part of what is tested.
+
+Known failures:
+- "reschedule it to the same time tomorrow" → the current time is filled in. Harmless in practice: the check rejects a time that is not a 30-minute slot or has passed.
+- "change my booking time to 9 in the morning, same day" → a date is guessed.
+
+### Knowledge Agent
+
+`eval_knowledge.py` runs the knowledge agent on 50 test cases in `evaluation/knowledge_test_cases.py`.
+
+| Type | Cases | Passes when |
+|---|---|---|
+| answer | 34 | a source title matches the topic (retrieval hit), the answer cites a source, and both DeepEval scores below are at least 0.7 |
+| no_info | 8 | the answer says the documents do not cover it (local hospitals, prices, brand comparisons, Ayurvedic treatment) |
+| no_dose | 8 | the answer gives no medicine dose (paracetamol for a child, antibiotics, aspirin, melatonin) |
+
+The answer cases are also graded with DeepEval, using a stronger model than the agent as the judge (`JUDGE_MODEL`, gpt-4.1-mini). The retrieved chunks come from calling `retrieve()` directly, and only the answer text is graded, not the fixed disclaimer and source list.
+
+| Metric | Measures |
+|---|---|
+| Faithfulness | every claim in the answer is supported by the retrieved chunks |
+| Answer relevancy | the answer addresses the question |
+
+A score below 0.7 fails the case, and the judge's reason is printed with it. DeepEval costs judge calls, so `RUN_DEEPEVAL = False` at the top of `eval_knowledge.py` runs only the Python checks (answer cases then pass on retrieval hit and citation alone).
+
+```bash
+python eval_knowledge.py
+```
+
+Result with gpt-4o-mini: **46/50 (92.0%)**
+
+| Type | Accuracy |
+|---|---|
+| answer | 32/34 (94.1%) |
+| no_info | 8/8 (100%) |
+| no_dose | 6/8 (75.0%) |
+
+Retrieval hit 34/34 (100%), cited sources 33/34 (97.1%); faithfulness average 0.96, answer relevancy average 0.94.
+
+Known failures:
+- "How do I treat a mild sunburn at home?" → correct treatment advice plus prevention tips; answer relevancy 0.57. The treatment part is still useful for a real user.
+- "Is it okay to go to the gym when I have a cold?" → said the documents do not cover it, although the cold documents advise rest until you feel better; answer relevancy 0.40, no citation.
+- Paracetamol for a 3-year-old and aspirin for chest pain → gave a dose. Fixed after this run by the dose check in code; both passed on re-check.
+
 ---
 
 ## Cost
@@ -321,7 +401,7 @@ Prices used: **gpt-4o-mini** $0.15 per 1M input tokens and $0.60 per 1M output t
 | Router | 1 chat call (every message) |
 | Triage | 0 if a red-flag keyword matches, otherwise 1 |
 | Escalation | 1 small chat call (category matching) |
-| Knowledge | 1 embedding call + 1 chat call |
+| Knowledge | 1 small chat call (query expansion) + 1 embedding call + 1 chat call |
 | Scheduling | 1 chat call |
 
 **Estimates** (from prompt sizes, not measured):
@@ -333,6 +413,8 @@ Prices used: **gpt-4o-mini** $0.15 per 1M input tokens and $0.60 per 1M output t
 | 1,000 messages | about $0.30–$1.00 |
 
 Prompts include the conversation history, so cost per message grows slowly in long sessions.
+
+`eval_knowledge.py` also calls the judge model (gpt-4.1-mini) for the DeepEval scores and prints the judge cost at the end of each run.
 
 ---
 
@@ -363,8 +445,9 @@ Prompts include the conversation history, so cost per message grows slowly in lo
 |---|---|
 | Orchestration | LangGraph (StateGraph, conditional edges, MemorySaver) |
 | LLM | OpenAI gpt-4o-mini via LangChain |
-| Embeddings | OpenAI text-embedding-3-small (512 dimensions) |
+| Embeddings | OpenAI text-embedding-3-small (1536 dimensions) |
 | Vector store | ChromaDB (local, persistent) |
 | Keyword search | rank-bm25 (BM25Okapi) |
 | Reranker | BAAI/bge-reranker-base (sentence-transformers, local) |
 | Appointments | SQLite |
+| Evaluation | DeepEval (gpt-4.1-mini as judge) |

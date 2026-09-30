@@ -15,7 +15,8 @@ load_dotenv(override=True)
 # --- Models ---
 CHAT_MODEL = "gpt-4o-mini"
 EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIMENSIONS = 512   # smaller vectors keep local storage small
+EMBEDDING_DIMENSIONS = 1536  # full size of text-embedding-3-small
+JUDGE_MODEL = "gpt-4.1-mini"  # grades the knowledge agent in eval_knowledge.py
 
 # --- Free local reranker model (no API cost) ---
 RERANKER_MODEL = "BAAI/bge-reranker-base"

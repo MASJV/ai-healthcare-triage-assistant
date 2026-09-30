@@ -289,6 +289,14 @@ def read_request(state):
     """
     now = datetime.now()
 
+    # the next 7 days with weekday names, so the LLM does not have to
+    # work out which date "Saturday" is
+    day_lines = []
+    for offset in range(1, 8):
+        day = now + timedelta(days=offset)
+        day_lines.append(day.strftime("%A %Y-%m-%d"))
+    next_days = ", ".join(day_lines)
+
     prompt = f"""
     Conversation so far:
     {format_history(state["messages"][:-1])}
@@ -296,18 +304,39 @@ def read_request(state):
     Latest User Message: {state['user_input']}
 
     Today is {now.strftime("%A, %Y-%m-%d")} and the time is {now.strftime("%H:%M")}.
+    Next 7 days: {next_days}
 
     You help with doctor appointments. From the conversation, fill in:
-    Action - book / reschedule / cancel / check / none
-             (none = the user has not asked for anything about appointments yet)
-    Name   - the patient's full name as the user wrote it, or none
+    Action - what the user wants now (if they changed their mind, the latest
+             request wins):
+             book       - a new appointment, even if asked as a question
+                          or without a date yet
+             reschedule - move an appointment that is already booked
+             cancel     - cancel an appointment that is already booked
+             check      - ask about an appointment that is already booked
+                          (its date or time, or whether it exists)
+             none       - the user has not asked for an appointment yet.
+                          Describing symptoms, however serious, is none.
+             Changing the date or time while still booking is still book.
+    Name   - the patient's full name as the user wrote it, anywhere in the
+             conversation, or none
     Phone  - the patient's phone number as the user wrote it, or none
     Date   - the date the user wants, as YYYY-MM-DD, or none
              (turn words like "tomorrow" or "next Monday" into a date)
     Time   - the time the user wants, as HH:MM in 24-hour format, or none
 
-    For reschedule, Date and Time are the NEW date and time.
-    Use only what the user said. Do not guess any field.
+    For reschedule, Date and Time are the NEW date and time, never the date
+    or time of the old appointment.
+    The user may write in Hinglish: aaj = today, kal = tomorrow,
+    parso = day after tomorrow, subah = morning, dopahar = afternoon,
+    shaam = evening, raat = night, baje = o'clock.
+
+    Use only what the user said. Do not guess any field:
+    - Never use today's date or the current time unless the user asked for them.
+    - A part of the day or a range of days is not an exact time or date,
+      so that field is none.
+    - You do not know the date or time of an existing appointment, so if the
+      user refers to it instead of giving a new one, that field is none.
 
     Reply in exactly this format:
     Action: <action>
@@ -334,9 +363,20 @@ def read_request(state):
             value = ""
 
         if key == "action":
-            request["action"] = value.lower()
+            # keep "none" for action instead of an empty string
+            if value:
+                request["action"] = value.lower()
         elif key in request:
             request[key] = value
+
+    # triage sent this message here in this turn (urgency is reset every turn):
+    # a symptom message read as "book" without a date and time is not a
+    # booking request yet, so treat it as none and offer the free slots
+    # (with the 48-hour advice for urgent cases)
+    from_triage = state.get("urgency", "") in ["urgent", "routine"]
+    if from_triage and request["action"] == "book":
+        if not request["date"] or not request["time"]:
+            request["action"] = "none"
 
     return request
 

@@ -1,7 +1,7 @@
 """
 knowledge_agent.py
 
-Stage: Question -> Hybrid Retrieval (Vector + BM25, fused with RRF)
+Stage: Question -> Query Expansion -> Hybrid Retrieval (Vector + BM25, fused with RRF)
        -> BGE Reranker -> Top Chunks -> LLM (config.CHAT_MODEL) -> Answer with sources
 
 Reads the Chroma collection built by ingest.py. Run `python ingest.py` first.
@@ -177,14 +177,38 @@ def rerank_chunks(question, chunks, top_k):
     return keep_top_chunks(scored_chunks, top_k)
 
 
+def expand_query(question):
+    """
+    Adds medical terms to the question before searching, so everyday words
+    still find the right documents (e.g. "piles" -> "hemorrhoids").
+    The original question is kept, so nothing the user wrote is lost.
+    If the LLM call fails, the original question is used alone.
+    """
+    prompt = f"""
+    A user asked a health question. List up to 5 medical or standard English
+    terms for the condition or topic they are asking about, separated by commas.
+    Reply with the terms only.
+
+    Question: {question}
+    """
+
+    try:
+        response = config.llm.invoke(prompt)
+    except Exception:
+        return question
+
+    return f"{question} {response.content.strip()}"
+
+
 def retrieve(question):
     """
-    Full retrieval pipeline: hybrid search -> fusion -> rerank.
+    Full retrieval pipeline: query expansion -> hybrid search -> fusion -> rerank.
     """
-    vector_chunks = vector_search(question, config.TOP_K_VECTOR)
-    bm25_chunks = bm25_search(question, config.TOP_K_BM25)
+    search_query = expand_query(question)
+    vector_chunks = vector_search(search_query, config.TOP_K_VECTOR)
+    bm25_chunks = bm25_search(search_query, config.TOP_K_BM25)
     fused_chunks = fuse_results(vector_chunks, bm25_chunks)
-    return rerank_chunks(question, fused_chunks, config.TOP_K_FINAL)
+    return rerank_chunks(search_query, fused_chunks, config.TOP_K_FINAL)
 
 
 def build_context_text(chunks):
@@ -205,6 +229,59 @@ DISCLAIMER = (
     "Please consult a doctor for medical advice."
 )
 
+# a number (or ½, ¼, ¾) followed by a unit that is always a medicine dose, e.g. "2 tablets", "½ tablet"
+MEDICINE_UNIT_PATTERN = r"(\d+(\.\d+)?|½|¼|¾)\s*(tablets?|capsules?|pills?|drops)\b"
+
+# a number followed by a unit that is also used for food and drink, e.g. "500 mg", "5 ml";
+# it only counts as a dose when the same sentence names a medicine
+AMOUNT_PATTERN = r"(\d+(\.\d+)?|½|¼|¾)\s*(mg|mcg|ml|milligrams?|micrograms?|teaspoons?|tsp)\b"
+MEDICINE_WORDS = (
+    r"\b(medicine|medication|drug|dose|dosage|tablet|capsule|pill|syrup|supplement"
+    r"|paracetamol|acetaminophen|ibuprofen|aspirin|antibiotic|antihistamine)"
+)
+
+NO_DOSE_LINE = "For the right dose of any medicine, please ask a doctor or pharmacist."
+
+
+def has_dose(sentence):
+    """
+    True if the sentence gives a medicine dose.
+    "Take 2 tablets" -> True, "75 mg of aspirin" -> True,
+    "drink about 2,000 ml of water" -> False, "300 mg of cholesterol" -> False
+    """
+    text = sentence.lower()
+    if re.search(MEDICINE_UNIT_PATTERN, text):
+        return True
+    if re.search(AMOUNT_PATTERN, text) and re.search(MEDICINE_WORDS, text):
+        return True
+    return False
+
+
+def remove_doses(answer):
+    """
+    Safety check in code: the prompt says never give a dose, but the model
+    sometimes still copies one from the documents.
+    Drops every sentence that contains a dose and adds one line pointing
+    the user to a doctor or pharmacist. Answers without a dose are unchanged.
+    """
+    kept_lines = []
+    removed = False
+
+    for line in answer.splitlines():
+        kept_sentences = []
+        for sentence in re.split(r"(?<=[.!?])\s+", line):
+            if has_dose(sentence):
+                removed = True
+            else:
+                kept_sentences.append(sentence)
+        kept_lines.append(" ".join(kept_sentences))
+
+    if not removed:
+        return answer
+
+    kept_lines.append(NO_DOSE_LINE)
+    return "\n".join(kept_lines).strip()
+
 
 #Knowledge Agent
 def knowledge_agent(state: UserState):
@@ -215,20 +292,29 @@ def knowledge_agent(state: UserState):
     You are a healthcare self-care information assistant.
     Answer the user's message strictly from the context below.
 
+    Safety rule (this overrides every other rule):
+    - Do not recommend prescription medicines (e.g. antibiotics). Do not give a
+      dose, amount or schedule for any medicine, including over-the-counter ones
+      like paracetamol, even if the context has one; point the user to a doctor
+      or pharmacist instead.
+
     Rules:
     - Use only facts stated in the context. Do not add advice, facts,
       numbers or home remedies from your own knowledge, even if you think
       they are correct.
     - Every sentence of guidance must be supported by the context and cited.
+    - Only include information that answers what the user asked. Leave out
+      facts from the context that do not answer it, even if they are on the
+      same topic.
     - Do not give a diagnosis.
     - End with one line on when to see a doctor, taken from the context.
       If the context does not say, write: "See a doctor if your symptoms
       get worse or do not improve."
-    - Do not recommend prescription medicines (e.g. antibiotics) or give doses;
-      point the user to a doctor or pharmacist instead.
     - Cite the context you used as [1], [2], etc.
     - If the context does not answer the message, say you do not have
       information on this and suggest consulting a doctor.
+      Do not say the context lacks information when it answers the question
+      in different words or only briefly.
     - The context may mention UK numbers (999, 111). Use Indian ones instead:
       112 for emergencies, 108 for an ambulance.
     - Keep the answer within 8 lines.
@@ -242,13 +328,14 @@ def knowledge_agent(state: UserState):
     """
 
     response = config.llm.invoke(prompt)
+    answer_text = remove_doses(response.content)
 
     source_lines = []
     for number, chunk_info in enumerate(chunks, start=1):
         source_lines.append(f"[{number}] {chunk_info['title']} - {chunk_info['url']}")
     sources = "\n".join(source_lines)
 
-    answer = f"{response.content}\n\n{DISCLAIMER}\n\nSources:\n{sources}"
+    answer = f"{answer_text}\n\n{DISCLAIMER}\n\nSources:\n{sources}"
 
     return {
         "result": answer,
