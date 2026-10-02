@@ -40,6 +40,7 @@ graph.add_conditional_edges(
     {
         "Scheduling Agent": "Scheduling Agent",
         "Escalation Agent": "Escalation Agent",
+        "Knowledge Agent": "Knowledge Agent",
         "Ask User": END           
     }
 )
@@ -57,7 +58,11 @@ app = graph.compile(checkpointer=memory)
 if __name__ == "__main__":
 
     # one thread_id per run per chat session
-    session = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    # run_name labels each turn in LangSmith when tracing is on
+    session = {
+        "configurable": {"thread_id": str(uuid.uuid4())},
+        "run_name": "symptom-triage-scheduler"
+    }
 
     while True:
 

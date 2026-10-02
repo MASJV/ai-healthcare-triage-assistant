@@ -1,14 +1,14 @@
 """
 triage_test_cases.py
 
-50 test cases for the Triage Agent.
+55 test cases for the Triage Agent.
 Each case has:
     scenario   - short tag of what the case checks
     history    - earlier messages as (role, text); role is "user" or "assistant"
     message    - the latest user message triage has to judge
     follow_ups - follow-up questions already asked in this session
                  (at MAX_FOLLOW_UPS triage must decide, it cannot ask again)
-    expected   - the correct level: emergency / urgent / routine / needs_more_info
+    expected   - the correct level: emergency / urgent / routine / self_care / needs_more_info
 """
 
 HEAD_INJURY_QUESTION = "Did he pass out, vomit, or seem confused after the fall?"
@@ -16,7 +16,7 @@ HEAD_INJURY_QUESTION = "Did he pass out, vomit, or seem confused after the fall?
 
 TEST_CASES = [
 
-    # ---------- emergency (14) ----------
+    # ---------- emergency (21) ----------
     {
         "scenario": "heart attack signs, no red-flag keyword",
         "history": [],
@@ -118,8 +118,57 @@ TEST_CASES = [
         "follow_ups": 1,
         "expected": "emergency"
     },
+    {
+        "scenario": "sudden vision change, no red-flag keyword",
+        "history": [],
+        "message": "since this morning a dark shadow like a curtain is covering part of the vision in my right eye",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
+    {
+        "scenario": "one-sided numbness that is easing",
+        "history": [],
+        "message": "my father's left hand and the left side of his face went numb an hour ago, he says it is getting better now",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
+    {
+        "scenario": "drowsy child, no dramatic signs",
+        "history": [],
+        "message": "my 3 year old has had loose motions for two days and today he is very drowsy and hard to wake up",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
+    {
+        "scenario": "bleeding in pregnancy",
+        "history": [],
+        "message": "I'm 32 weeks pregnant, I've been bleeding for an hour and have strong pain in my belly",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
+    {
+        "scenario": "new symptom after past heart surgery",
+        "history": [],
+        "message": "I had a heart bypass two years ago and today I get a tightness when I walk that feels different from before",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
+    {
+        "scenario": "cannot keep fluids down, needs same-day care",
+        "history": [],
+        "message": "vomiting and loose motions for 2 days, I can barely keep water down",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
+    {
+        "scenario": "high blood sugar with symptoms, needs same-day care",
+        "history": [],
+        "message": "I'm diabetic, my sugar has been above 350 for two days and I'm very thirsty",
+        "follow_ups": 0,
+        "expected": "emergency"
+    },
 
-    # ---------- urgent (13) ----------
+    # ---------- urgent (11) ----------
     {
         "scenario": "fever not settling",
         "history": [],
@@ -149,13 +198,6 @@ TEST_CASES = [
         "expected": "urgent"
     },
     {
-        "scenario": "dehydration risk",
-        "history": [],
-        "message": "vomiting and loose motions for 2 days, I can barely keep water down",
-        "follow_ups": 0,
-        "expected": "urgent"
-    },
-    {
         "scenario": "possible fracture",
         "history": [],
         "message": "twisted my ankle yesterday, it's very swollen and I can't put any weight on it",
@@ -166,13 +208,6 @@ TEST_CASES = [
         "scenario": "asthma getting worse",
         "history": [],
         "message": "my inhaler isn't helping as much this week and I'm wheezing more at night",
-        "follow_ups": 0,
-        "expected": "urgent"
-    },
-    {
-        "scenario": "high blood sugar",
-        "history": [],
-        "message": "I'm diabetic, my sugar has been above 350 for two days and I'm very thirsty",
         "follow_ups": 0,
         "expected": "urgent"
     },
@@ -220,14 +255,7 @@ TEST_CASES = [
         "expected": "urgent"
     },
 
-    # ---------- routine (12) ----------
-    {
-        "scenario": "common cold",
-        "history": [],
-        "message": "runny nose and a mild sore throat since yesterday",
-        "follow_ups": 0,
-        "expected": "routine"
-    },
+    # ---------- routine (4) ----------
     {
         "scenario": "medicine refill",
         "history": [],
@@ -239,13 +267,6 @@ TEST_CASES = [
         "scenario": "long-standing skin issue",
         "history": [],
         "message": "mild acne on my face for a few months",
-        "follow_ups": 0,
-        "expected": "routine"
-    },
-    {
-        "scenario": "minor ache",
-        "history": [],
-        "message": "my knee aches a little after running but it goes away with rest",
         "follow_ups": 0,
         "expected": "routine"
     },
@@ -263,40 +284,49 @@ TEST_CASES = [
         "follow_ups": 0,
         "expected": "routine"
     },
+
+    # ---------- self_care (8) ----------
+    {
+        "scenario": "common cold",
+        "history": [],
+        "message": "runny nose and a mild sore throat since yesterday",
+        "follow_ups": 0,
+        "expected": "self_care"
+    },
+    {
+        "scenario": "minor ache",
+        "history": [],
+        "message": "my knee aches a little after running but it goes away with rest",
+        "follow_ups": 0,
+        "expected": "self_care"
+    },
     {
         "scenario": "occasional heartburn",
         "history": [],
         "message": "I get mild heartburn after spicy food sometimes",
         "follow_ups": 0,
-        "expected": "routine"
-    },
-    {
-        "scenario": "wart",
-        "history": [],
-        "message": "small painless wart on my finger",
-        "follow_ups": 0,
-        "expected": "routine"
+        "expected": "self_care"
     },
     {
         "scenario": "typos",
         "history": [],
         "message": "mild hedache after long screen time in the evenings",
         "follow_ups": 0,
-        "expected": "routine"
+        "expected": "self_care"
     },
     {
         "scenario": "seasonal allergy",
         "history": [],
         "message": "sneezing and itchy eyes every morning this season",
         "follow_ups": 0,
-        "expected": "routine"
+        "expected": "self_care"
     },
     {
         "scenario": "trap: red-flag word, harmless",
         "history": [],
         "message": "I accidentally swallowed my chewing gum",
         "follow_ups": 0,
-        "expected": "routine"
+        "expected": "self_care"
     },
     {
         "scenario": "answer to follow-up rules out danger",
@@ -306,7 +336,14 @@ TEST_CASES = [
         ],
         "message": "no, he cried for a minute and is playing normally, just a small bump",
         "follow_ups": 1,
-        "expected": "routine"
+        "expected": "self_care"
+    },
+    {
+        "scenario": "wart",
+        "history": [],
+        "message": "small painless wart on my finger",
+        "follow_ups": 0,
+        "expected": "self_care"
     },
 
     # ---------- needs_more_info (11) ----------

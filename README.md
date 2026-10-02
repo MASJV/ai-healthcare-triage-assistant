@@ -2,9 +2,9 @@
 
 A multi-agent healthcare assistant built with LangGraph. It reads a user's message, decides what they need, and hands it to the right agent:
 
-- **Triage**: rates symptoms as emergency, urgent or routine, and asks follow-up questions when a message is too vague
+- **Triage**: rates symptoms as emergency, urgent, routine or self-care, and asks follow-up questions when a message is too vague
 - **Escalation**: gives a fixed emergency response (call 108/112 plus first-aid steps) with no LLM-written advice
-- **Knowledge**: answers self-care questions from public health documents using hybrid RAG, with citations
+- **Knowledge**: answers general health questions, and gives self-care advice when triage finds a problem can be managed at home, from public health documents using hybrid RAG, with citations
 - **Scheduling**: books, reschedules, cancels and checks appointments in a SQLite database
 
 > **Disclaimer:** This assistant provides general health information and appointment support only. It is not a medical device, does not diagnose, and is not a substitute for professional medical advice. In an emergency, call 112 (emergency) or 108 (ambulance).
@@ -17,12 +17,13 @@ A multi-agent healthcare assistant built with LangGraph. It reads a user's messa
 flowchart TD
     START([User message]) --> R[Router Agent]
     R -->|symptom| T[Triage Agent]
-    R -->|self_care| K[Knowledge Agent]
+    R -->|health_info| K[Knowledge Agent]
     R -->|booking| S[Scheduling Agent]
     R -->|other| E1([End: redirect reply])
 
     T -->|emergency| X[Escalation Agent]
     T -->|urgent / routine| S
+    T -->|self_care| K
     T -->|needs_more_info| Q[Ask follow-up question]
     Q -.->|user's answer, next turn| R
 
@@ -31,6 +32,8 @@ flowchart TD
     X --> END
 ```
 
+The router decides which workflow a message needs; triage decides the level of care. Any current health problem goes through triage, even when the user asks "what can I do at home?", so only triage can decide that home care is enough. Questions with no current problem (prevention, diet, how an illness works) go straight to the Knowledge Agent.
+
 All agents share one state (`UserState`). A LangGraph `MemorySaver` checkpointer keeps the conversation for each chat session (one `thread_id` per run), so follow-up answers such as "yes, he vomited" are read together with the earlier messages.
 
 ---
@@ -38,14 +41,20 @@ All agents share one state (`UserState`). A LangGraph `MemorySaver` checkpointer
 ## Agents
 
 ### Router Agent (`router_agent.py`)
-- The LLM labels the latest message as `symptom`, `self_care`, `booking` or `other`, using the conversation history.
-- **Rule-based override:** after the LLM picks a label, the message is checked against the triage red-flag keywords. If one matches, the intent is forced to `symptom`, so a message like "severe chest pain, need appointment" always goes through triage instead of straight to booking.
+- The LLM labels the latest message using the conversation history:
+  - `symptom`: a current symptom, injury or health problem of a specific person, even if the user asks for home care or a doctor
+  - `health_info`: a general health question with no current problem (prevention, diet, how an illness works), or a question about a health answer just given
+  - `booking`: book, reschedule, cancel or check an appointment, with no new health problem
+  - `other`: anything else
+- **Rule-based check first:** the message is checked against the triage red-flag keywords before the LLM call. If one matches, the intent is `symptom` with no LLM call, so a message like "severe chest pain, need appointment" always goes through triage instead of straight to booking.
 - `other` gets a short reply explaining what the assistant can help with.
 
 ### Triage Agent (`triage_agent.py`)
 Two layers:
 1. **Keyword filter (no LLM):** a list of red-flag phrases (chest pain, can't breathe, unconscious, seizure, stroke signs, heavy bleeding, overdose, suicide, and more). A match is marked `emergency` immediately. Matching uses a start-of-word regex, so `fits` does not match inside `benefits`, while `seizure` still matches `seizures`.
-2. **LLM reasoning:** anything the keywords do not catch is classified as `emergency`, `urgent` (see a doctor within 24–48 hours) or `routine`, with a one-line reason. When unsure, the prompt asks for the more serious level.
+2. **LLM reasoning:** anything the keywords do not catch is classified as `emergency` (life-threatening, or time-critical without severe pain, such as a sudden change in vision or new numbness), `urgent` (see a doctor within 24–48 hours), `routine` (a normal appointment) or `self_care` (mild, can be managed at home and watched), with a one-line reason. When unsure, the prompt asks for the more serious level, and `self_care` is never chosen when the user asks to see a doctor.
+
+`emergency` goes to the Escalation Agent, `urgent` and `routine` to the Scheduling Agent, and `self_care` to the Knowledge Agent. For `self_care`, the knowledge search uses all of the user's messages about the problem (the first message plus the answers to follow-up questions), and the answer starts with a fixed line that the problem can usually be managed at home and an appointment can be booked if it gets worse.
 
 If a message is too vague to judge safely (for example "he hit his head"), triage returns `needs_more_info` and asks one follow-up question about the relevant danger signs. It asks at most `MAX_FOLLOW_UPS` (2) questions before it must decide. An unreadable LLM reply defaults to `urgent`.
 
@@ -135,10 +144,11 @@ The self-care corpus comes from public health sources:
 
 ```
 symptom-triage-scheduler/
+├── app.py                 # Streamlit web app
 ├── symptomTriage.py       # LangGraph graph + command-line chat loop
 ├── state.py               # shared UserState + conversation history helper
 ├── config.py              # all settings and the shared LLM
-├── router_agent.py        # intent routing + red-flag override
+├── router_agent.py        # intent routing + red-flag check
 ├── triage_agent.py        # keyword filter + LLM triage + follow-up questions
 ├── escalation_agent.py    # fixed emergency response
 ├── knowledge_agent.py     # hybrid RAG answers with citations
@@ -151,11 +161,16 @@ symptom-triage-scheduler/
 ├── eval_care_bench.py     # external validation on CARE-Bench Public Test 1
 ├── evaluation/
 │   ├── router_test_cases.py   # 50 router test cases
-│   ├── triage_test_cases.py   # 50 triage test cases
+│   ├── triage_test_cases.py   # 55 triage test cases
 │   ├── scheduling_test_cases.py   # 50 scheduling test cases
 │   ├── knowledge_test_cases.py    # 50 knowledge test cases
+│   ├── latency.py                 # latency summary printed by the evals
 │   ├── care_bench_public_test.jsonl   # CARE-Bench Public Test 1, 135 prefixes (external validation)
-│   └── care_bench_predictions_v1.csv  # v1 predictions (prefix_id, predicted_label)
+│   └── care_bench_predictions_v1.csv … v3.csv  # predictions per version (prefix_id, predicted_label)
+├── assets/
+│   └── triage_bg.png      # web app background
+├── .streamlit/
+│   └── config.toml        # dark theme for the web app
 ├── requirements.txt
 └── .env.example
 ```
@@ -185,19 +200,35 @@ Create `.env` from the example and add your key:
 OPENAI_API_KEY=your-openai-api-key
 ```
 
+LangSmith tracing is optional. To turn it on, also add:
+
+```
+LANGSMITH_API_KEY=your-langsmith-api-key
+LANGSMITH_TRACING=true
+LANGSMITH_PROJECT=symptom-triage-scheduler
+```
+
 Build the knowledge base (once, and again whenever the documents change):
 
 ```bash
 python ingest.py
 ```
 
-Start the chat:
+Start the web app:
+
+```bash
+streamlit run app.py
+```
+
+Or chat in the terminal:
 
 ```bash
 python symptomTriage.py
 ```
 
 Type `exit` to quit; the graph structure is printed on exit.
+
+The web app shows the reply (emergencies in red, follow-up questions in yellow), the routing and triage details, and the conversation in the sidebar. "New conversation" starts a fresh session.
 
 > The first run downloads the BGE reranker model (about 1 GB).
 
@@ -251,7 +282,8 @@ Settings live in `config.py`:
 | Risk | How it is handled |
 |---|---|
 | An emergency is rated too low | Keyword filter marks red flags as `emergency` before any LLM call; when unsure, triage picks the more serious level; an unreadable reply defaults to `urgent` |
-| An emergency message is labelled as a booking | The router re-checks every message against the red-flag keywords and forces triage |
+| An emergency message is labelled as a booking | The router checks every message against the red-flag keywords first and sends matches to triage |
+| A symptom phrased as a home-care question skips triage | The router sends every current health problem to triage; only triage can choose `self_care`, and never when the user asks for a doctor |
 | A vague symptom is rated from too little information | Triage asks up to 2 follow-up questions about danger signs before deciding |
 | The LLM writes wrong emergency advice | Emergency steps are fixed text from `FIRST_AID`; the LLM only picks category names, and unknown names are dropped |
 | Self-care answers go beyond the sources | The prompt allows only facts from the retrieved documents, with citations; no prescription medicines and no medicine doses, even when the documents contain one |
@@ -266,12 +298,12 @@ The four agent test sets below are internal (development) sets: prompts were imp
 
 ### Router Agent
 
-`eval_router.py` runs the real `router_agent()` (LLM label + red-flag override) on 50 test cases in `evaluation/router_test_cases.py` and prints overall and per-label accuracy, plus every wrong case.
+`eval_router.py` runs the real `router_agent()` (red-flag check + LLM label) on 50 test cases in `evaluation/router_test_cases.py` and prints overall and per-label accuracy, plus every wrong case.
 
 | Label | Cases | What they cover |
 |---|---|---|
-| symptom | 14 | third person, typos, Hinglish, mental health, answers to triage follow-up questions, new symptom after a booking |
-| self_care | 12 | home care, diet, prevention, general health questions, follow-up on a self-care answer |
+| symptom | 19 | third person, typos, Hinglish, mental health, answers to triage follow-up questions, new symptom after a booking, a current problem with a home-care question (small cut, sunburn, loose motions, blocked nose, gym with a cold) |
+| health_info | 7 | general wellness, prevention, how an illness works, diet for a diagnosed condition, follow-up on a health answer |
 | booking | 12 | book, reschedule, cancel, check, answers to name/phone/slot questions, switching from triage to cancel |
 | other | 12 | greetings, coding, pets, plants, devices, "book a flight", "cancel Netflix", prompt injection |
 
@@ -279,47 +311,53 @@ The four agent test sets below are internal (development) sets: prompts were imp
 python eval_router.py
 ```
 
-Result with gpt-4o-mini: **48/50 (96.0%)**
+Result with gpt-4o-mini, v3 (router unchanged since v2): **48/50 (96.0%)** (v1, before the router labels changed from `self_care` to `health_info`: 48/50)
 
 | Label | Accuracy |
 |---|---|
-| symptom | 14/14 (100%) |
-| self_care | 11/12 (91.7%) |
+| symptom | 19/19 (100%) |
+| health_info | 6/7 (85.7%) |
 | booking | 12/12 (100%) |
 | other | 11/12 (91.7%) |
 
+The v2 run first scored 44/50 against labels that still marked 4 home-care questions about a current problem ("How do I treat a mild sunburn at home?", home remedies for a blocked nose, food during loose motions, gym with a cold) as `health_info`. Under the v2 rule those describe a problem the user has now and belong to triage, which is what the router predicted; the labels were corrected, and a fresh run gave 48/50.
+
 Known failures:
-- "What are some ways to lower my risk of a heart attack?" → `symptom`. The red-flag override is kept on purpose: sending a prevention question to triage is safer than missing an emergency.
+- "What are some ways to lower my risk of a heart attack?" → `symptom`. The red-flag check is kept on purpose: sending a prevention question to triage is safer than missing an emergency.
 - "My dog has been vomiting since morning" → `symptom` instead of `other`.
 
 ### Triage Agent
 
-`eval_triage.py` runs the real `triage_agent()` (keyword filter + LLM) on 50 test cases in `evaluation/triage_test_cases.py`. Each case sets how many follow-up questions were already asked, so the `MAX_FOLLOW_UPS` limit is tested too. Besides accuracy it counts under-triage (level lower than expected) and over-triage (level higher than expected).
+`eval_triage.py` runs the real `triage_agent()` (keyword filter + LLM) on 55 test cases in `evaluation/triage_test_cases.py`. Each case sets how many follow-up questions were already asked, so the `MAX_FOLLOW_UPS` limit is tested too. Besides accuracy it counts under-triage (level lower than expected) and over-triage (level higher than expected).
 
 | Level | Cases | What they cover |
 |---|---|---|
-| emergency | 14 | heart attack, stroke, poisoning, bleeding and breathing signs worded so no red-flag keyword matches (13 of 14), infant fever, Hinglish, a follow-up answer that turns a case into an emergency |
-| urgent | 13 | infections, dehydration, possible fracture, worsening asthma, high blood sugar, answers to follow-up questions, follow-up limit reached |
-| routine | 12 | cold, refill, check-up, minor aches, a follow-up answer that rules out danger, "swallowed my chewing gum" |
+| emergency | 21 | heart attack, stroke, poisoning, bleeding and breathing signs worded so no red-flag keyword matches (20 of 21), infant fever, Hinglish, a follow-up answer that turns a case into an emergency, time-critical cases without dramatic signs (sudden vision change, one-sided numbness that is easing, a drowsy child, bleeding in pregnancy, a new symptom after heart surgery), cases that need same-day care (cannot keep fluids down, high blood sugar with symptoms) |
+| urgent | 11 | infections, possible fracture, worsening asthma, painful red eye, dental abscess, answers to follow-up questions, follow-up limit reached |
+| routine | 4 | refill, check-up, acne for months, dandruff for weeks |
+| self_care | 8 | cold, minor aches, heartburn, seasonal allergy, wart, a follow-up answer that rules out danger, "swallowed my chewing gum" |
 | needs_more_info | 11 | vague messages such as "he hit his head", "I feel weird", "rash" |
 
 ```bash
 python eval_triage.py
 ```
 
-Result with gpt-4o-mini: **46/50 (92.0%)**, under-triage 0, over-triage 3
+Result with gpt-4o-mini, v3: **52/55 (94.5%)**, under-triage 2, over-triage 1
 
 | Level | Accuracy |
 |---|---|
-| emergency | 13/14 (92.9%) |
-| urgent | 11/13 (84.6%) |
-| routine | 11/12 (91.7%) |
+| emergency | 20/21 (95.2%) |
+| urgent | 11/11 (100%) |
+| routine | 3/4 (75.0%) |
+| self_care | 7/8 (87.5%) |
 | needs_more_info | 11/11 (100%) |
 
+The v3 run first scored 49/55 against older labels. Three were corrected against the v3 level definitions and the same predictions rescored: "can barely keep water down" and high blood sugar with thirst need same-day care, which the `urgent` level (24–48 hours) is too slow for, so they are `emergency`; a small painless wart can be treated at home, so it is `self_care`. Earlier runs: v1 46/50 (92.0%, before triage had a `self_care` level), v2 46/50 (92.0%, before the 5 time-critical emergency cases were added).
+
 Known failures:
-- "the worst headache of my life came on suddenly a few minutes ago" → `needs_more_info` instead of `emergency`. The under-triage count leaves out `needs_more_info`, so this missed emergency is not in it.
-- Dehydration ("can barely keep water down") and high blood sugar → `emergency` instead of `urgent` (over-triage, the safe direction).
-- "I accidentally swallowed my chewing gum" → `emergency`. The keyword "swallowed" forces it; kept on purpose, like the router override.
+- "I had a heart bypass two years ago and today I get a tightness when I walk that feels different from before" → `urgent` instead of `emergency`.
+- Mild acne for months → `self_care` instead of `routine` (under-triage, low risk).
+- "I accidentally swallowed my chewing gum" → `emergency`. The keyword "swallowed" forces it; kept on purpose, like the router's red-flag check.
 
 ### Scheduling Agent
 
@@ -395,12 +433,14 @@ Known failures:
 
 `eval_care_bench.py` runs CARE-Bench Public Test 1 (62 cases, 135 labelled prefixes) from `evaluation/care_bench_public_test.jsonl`. The cases are patient messages in everyday, first-person language, 1 to 3 rounds each, built from real medical dialogue sources and human-reviewed. They are used for testing only; prompts are not changed to fit them.
 
+Why CARE-Bench: no public dataset matches this app's workflows exactly. CARE-Bench is the closest fit: patient-written messages in everyday language over 1 to 3 rounds, with an "ask for more information" label that tests follow-up questions. Semigran vignettes (clinician-written, one message, 15 cases per class) and RepVig (vignette texts not released) were checked and fit worse.
+
 Each prefix is the patient's messages up to one point in the conversation. As in the official CARE-Bench inputs, the rounds are joined into one message (the benchmark has no assistant turns between them) and sent through the app's path: Router Agent, then Triage Agent for symptoms. Triage may still ask a follow-up in rounds 1 and 2 (`follow_ups` = earlier rounds, at most `MAX_FOLLOW_UPS`).
 
 | CARE-Bench label | Meaning | App output counted as this label |
 |---|---|---|
 | `0A` | ask for more information | triage `needs_more_info`, or router `other` (the app asks what the symptom is) |
-| `0B` | self-care or monitoring | router `self_care` |
+| `0B` | self-care or monitoring | triage `self_care`, or router `health_info` |
 | `1A` | non-urgent professional care | triage `routine` or `urgent`, or router `booking` |
 | `1B` | urgent or emergency care now | triage `emergency` |
 
@@ -412,22 +452,24 @@ Metrics are computed the same way as the official CARE-Bench scorer: accuracy, m
 python eval_care_bench.py
 ```
 
-Result with gpt-4o-mini (v1, prompts unchanged), scope: Router Agent + Triage Agent only.
+Results with gpt-4o-mini, scope: Router Agent + Triage Agent only. v1: prompts unchanged, `0B` was router `self_care` only. v2: router `health_info` + triage `self_care`. v3: v2 + wider triage `emergency` definition (current version).
 
-| Metric | This system |
-|---|---|
-| Urgent false negatives (`1B` not sent to `1B`) | 8/26 (30.8%) |
-| Missed care (`1A`/`1B` answered `0A`/`0B`) | 8/74 (10.8%) |
-| Over-escalation | 53/135 (39.3%) |
-| Under-escalation | 18/135 (13.3%) |
-| Accuracy | 64/135 (47.4%) |
-| Macro-F1 | 42.2 |
+| Metric | v1 | v2 | v3 |
+|---|---|---|---|
+| Urgent false negatives (`1B` not sent to `1B`) | 8/26 (30.8%) | 9/26 (34.6%) | 5/26 (19.2%) |
+| Missed care (`1A`/`1B` answered `0A`/`0B`) | 8/74 (10.8%) | 3/74 (4.1%) | 3/74 (4.1%) |
+| Over-escalation | 53/135 (39.3%) | 58/135 (43.0%) | 56/135 (41.5%) |
+| Under-escalation | 18/135 (13.3%) | 13/135 (9.6%) | 9/135 (6.7%) |
+| Accuracy | 64/135 (47.4%) | 64/135 (47.4%) | 70/135 (51.9%) |
+| Macro-F1 | 42.2 | 40.5 | 45.4 |
 
 Comparison with the models published in the CARE-Bench repository on the same 135 prefixes, in the unprompted setting (patient text only, no CARE-Bench instructions), which is the closest match to this system:
 
 | System | Accuracy | Macro-F1 | Missed care | Urgent false negatives |
 |---|---|---|---|---|
-| This system (router + triage, gpt-4o-mini) | 47.4 | 42.2 | 10.8 | 30.8 |
+| This system, v1 (router + triage, gpt-4o-mini) | 47.4 | 42.2 | 10.8 | 30.8 |
+| This system, v2 | 47.4 | 40.5 | 4.1 | 34.6 |
+| This system, v3 | 51.9 | 45.4 | 4.1 | 19.2 |
 | GPT-5.5 | 45.9 | 45.0 | 29.7 | 23.1 |
 | Claude Opus 4.7 | 49.6 | 50.2 | 37.8 | 19.2 |
 | Range of the 11 published models | 34.8–54.1 | 33.8–54.0 | 6.8–82.4 | 7.7–80.8 |
@@ -435,16 +477,49 @@ Comparison with the models published in the CARE-Bench repository on the same 13
 The published models' free-text replies were mapped to labels by an LLM; this system's fixed outputs are mapped directly, so the comparison is close but not identical.
 
 What the results show:
-- Missed care is low (better than 9 of the 11 published models): the triage prompt prefers the more serious level when unsure.
-- The cost of that choice is over-escalation: vague first messages get `urgent` instead of a follow-up question, and mild cases go to an appointment because triage has no self-care level. CARE-Bench rewards asking first and self-care where enough, so most of the `0A`/`0B` errors come from this design difference.
-- Urgent false negatives (8/26) are the main weakness: all 8 went to `urgent` (doctor within 24–48 hours) or a follow-up question, none to self-care. They are time-critical cases without dramatic signs (eye symptoms after retinal detachment, flashes of light, new numbness after a brain aneurysm, a child falling asleep after vertigo, pain in pregnancy).
-- The router sends some questions about serious conditions to `self_care` (an HIV result with a low CD4 count, emergency contraception taken late), so they never reach triage.
+- Missed care fell from 8/74 in v1 to 3/74 in v2 and v3, lower than all 11 published models: symptoms can no longer skip triage, and triage prefers the more serious level when unsure.
+- Urgent false negatives fell from 8/26 (v1) to 5/26 (v3), level with Claude Opus 4.7 and better than GPT-5.5. v2 alone did not change them (9/26): all of them had reached triage and were rated `urgent`, so the cause was the `emergency` definition, not routing. The 5 left are all rated `urgent`: a child falling asleep after sudden vertigo, flashes of light in one eye, and dull side pain in pregnancy.
+- The cost is over-escalation (56/135 in v3): most detailed first messages get `urgent` instead of a follow-up question (`0A` recall 3/37), and most `0B` cases still go to `urgent` (`0B` recall 8/24).
+- v2 fixed the HIV result with a low CD4 count, which v1 sent to `self_care`. Questions worded as information about something the user took (emergency contraception, a drug interaction before a procedure) still go to `health_info`.
+- Held-out status: the v3 `emergency` definition was widened after seeing the v2 urgent false negatives, so CARE-Bench is not fully held-out for v3. The wording uses general categories rather than the case details, and 5 internal cases were added to check it.
+
+Why accuracy and macro-F1 stay low, and why they are not the target:
+- `0A` (ask for more information) is 37 of the 135 prefixes, and CARE-Bench expects a question even on detailed first messages. This app asks a follow-up only when a message is too vague to judge safely; otherwise it rates the message. That is a different policy, so most `0A` cases are counted wrong by design.
+- Over-escalation comes from "if unsure, choose the more serious level". This is kept on purpose: for a triage tool, sending someone to a doctor they did not need is the cheaper mistake.
+- Raising accuracy would mean tuning prompts against the benchmark, which would make it an internal set. It would also mean loosening the safety rule above.
+
+The target is safety: someone who needs care should not be told they can wait or manage at home. So CARE-Bench is reported as an external safety stress test. The metrics that match that target are missed care, under-escalation and urgent false negatives; accuracy and macro-F1 are shown next to them for comparison. CARE-Bench is not tuned further after v3.
 
 Known limits: the source dialogues are not Indian patients, the benchmark was built with GPT-5.5 help and then human review, and the data is CC BY-NC 4.0 (non-commercial use only).
 
 Source: *CARE-Bench: Benchmarking Patient-Facing LLM Triage*, 2026. [arXiv:2608.03731](https://arxiv.org/abs/2608.03731) · [GitHub](https://github.com/ningkko/CARE-bench) · [Hugging Face dataset](https://huggingface.co/datasets/ningkko/CARE-Bench)
 
 ---
+
+## Tracing and Latency
+
+With LangSmith turned on (see Setup), every chat turn is traced as one run named `symptom-triage-scheduler`. LangGraph records each agent node and LangChain records each LLM call automatically; the steps outside LangChain are wrapped with `@traceable`:
+
+| File | Traced steps |
+|---|---|
+| `triage_agent.py` | `checkRedFlags` |
+| `knowledge_agent.py` | `expandQuery`, `vectorSearch`, `bm25Search`, `fuseResults`, `rerankChunks`, `retrieve`, `removeDoses` |
+| `escalation_agent.py` | `findCategoriesByKeywords`, `findCategoriesByLlm`, `findFirstAidSteps` |
+| `scheduling_agent.py` | `readRequest`, `listFreeSlots` |
+
+Latency is measured in code, so it works without LangSmith:
+- `eval_router.py`, `eval_triage.py` and `eval_care_bench.py` time every call and print the average, median, 95th percentile and slowest call (`evaluation/latency.py`). These are the numbers to compare before and after a change such as JeV.
+- The web app shows the time for each message under Triage Details (`latency_seconds`).
+
+Measured latency, v3 with gpt-4o-mini (seconds per call, one run of each internal eval):
+
+| Agent | Average | Median | p95 | Max |
+|---|---|---|---|---|
+| Router (50 cases) | 0.90 | 0.78 | 1.43 | 4.07 |
+| Triage (55 cases) | 1.01 | 0.98 | 1.40 | 2.19 |
+| Router + Triage, CARE-Bench (135 prefixes) | 1.51 | 1.72 | 2.64 | 3.07 |
+
+Cases that match a red-flag keyword skip the LLM call, which pulls the averages down. The max includes the first call of the run. The CARE-Bench row is the full path a symptom message takes (router, then triage when the router says `symptom`).
 
 ## Cost
 
@@ -454,7 +529,7 @@ Prices used: **gpt-4o-mini** $0.15 per 1M input tokens and $0.60 per 1M output t
 
 | Path | Calls |
 |---|---|
-| Router | 1 chat call (every message) |
+| Router | 0 if a red-flag keyword matches, otherwise 1 chat call |
 | Triage | 0 if a red-flag keyword matches, otherwise 1 |
 | Escalation | 1 small chat call (category matching) |
 | Knowledge | 1 small chat call (query expansion) + 1 embedding call + 1 chat call |
@@ -477,8 +552,9 @@ Prompts include the conversation history, so cost per message grows slowly in lo
 ## Data & Privacy
 
 - Appointments, including patient names and phone numbers, are stored in a local SQLite file, `appointments.db`. It is git-ignored and never committed.
-- Conversation memory lives in the running process only (`MemorySaver`) and is cleared when the chat loop stops.
+- Conversation memory lives in the running process only (`MemorySaver`), one thread per chat session or browser session, and is cleared when the process stops.
 - User messages and retrieved document text are sent to the OpenAI API to generate replies.
+- When LangSmith tracing is on, the same inputs and outputs are also sent to LangSmith. It is off unless `LANGSMITH_TRACING=true` is set.
 - The API key is read from `.env`, which is git-ignored; `.env.example` holds only a placeholder.
 
 ---
@@ -500,6 +576,7 @@ Prompts include the conversation history, so cost per message grows slowly in lo
 | Area | Tools |
 |---|---|
 | Orchestration | LangGraph (StateGraph, conditional edges, MemorySaver) |
+| UI | Streamlit |
 | LLM | OpenAI gpt-4o-mini via LangChain |
 | Embeddings | OpenAI text-embedding-3-small (1536 dimensions) |
 | Vector store | ChromaDB (local, persistent) |
@@ -507,3 +584,4 @@ Prompts include the conversation history, so cost per message grows slowly in lo
 | Reranker | BAAI/bge-reranker-base (sentence-transformers, local) |
 | Appointments | SQLite |
 | Evaluation | DeepEval (gpt-4.1-mini as judge) |
+| Tracing | LangSmith (optional) |

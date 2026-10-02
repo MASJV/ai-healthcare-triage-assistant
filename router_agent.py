@@ -6,13 +6,19 @@ from triage_agent import check_red_flags
 
 
 OTHER_REPLY = (
-    "I can help with health symptoms, self-care questions and doctor appointments. "
+    "I can help with health symptoms, general health questions and doctor appointments. "
     "Please tell me about a symptom or what you need."
 )
 
 
 #Router Agent
 def router_agent(state: UserState):
+
+    # red-flag symptoms always go through triage, so no LLM call is needed
+    if check_red_flags(state["user_input"]) is not None:
+        return {
+            "intent": "symptom"
+        }
 
     # every message except the one being classified now
     history = format_history(state["messages"][:-1])
@@ -23,29 +29,39 @@ def router_agent(state: UserState):
 
     Latest User Message: {state['user_input']}
 
-    Classify the intent of the latest user message into exactly one of these labels:
-    symptom   - a person is describing their own or someone else's symptoms,
-                or asking what they might mean. This includes emotional
-                distress, hopelessness and sleep or mood problems.
-    self_care - a general question about human health: home care, first aid
-                for minor problems, diet, prevention, or how an illness works
-                (e.g. "how is a migraine different from a headache?")
-    booking   - user wants to book, reschedule, cancel or check a doctor's
-                appointment
-    other     - anything that is not about a person's health or a doctor's
-                appointment: animals, plants, devices, vehicles, travel or
-                ticket bookings, subscriptions, greetings, jokes, general
-                knowledge
+    Decide which workflow the latest user message needs.
+    Classify it into exactly one of these labels:
+    symptom     - a current symptom, injury or health problem of a specific
+                  person (the user or someone else), or a new worry about one.
+                  This includes emotional distress, hopelessness and sleep or
+                  mood problems. It stays symptom even if the user asks what
+                  they can do at home, whether they can just rest, or whether
+                  they need a doctor
+                  (e.g. "I have a mild cold, what can I do at home?").
+    health_info - a general health question with no current health problem
+                  of a specific person: prevention, diet, general wellness,
+                  how an illness works, or how a problem is usually treated
+                  (e.g. "how can I prevent dehydration in summer?"). A question
+                  about a health answer the assistant just gave is also
+                  health_info.
+    booking     - user wants to book, reschedule, cancel or check a doctor's
+                  appointment, with no new health problem to assess
+    other       - anything that is not about a person's health or a doctor's
+                  appointment: animals, plants, devices, vehicles, travel or
+                  ticket bookings, subscriptions, greetings, jokes, general
+                  knowledge
 
     Rules, in order of priority:
-    1. If the message describes a symptom, the label is symptom, even if the
-       user also asks to see a doctor or book an appointment
-       (e.g. "my knee has been swollen for days, I need a doctor" -> symptom).
+    1. If the message describes a current health problem, the label is
+       symptom, even if the user also asks for home care, a doctor or an
+       appointment (e.g. "my knee has been swollen for days, I need a doctor"
+       -> symptom). A decision on whether home care is enough is made later,
+       not here.
     2. If the assistant just asked a follow-up question about symptoms and the
        user is answering it, the label is symptom.
     3. If the assistant just asked about an appointment (name, phone, slot)
        and the user is answering it, the label is booking.
-    4. Words like "book", "cancel" or "fix" only mean booking or self_care
+    4. Words like "book", "cancel" or "fix" only mean booking or health_info
        when they are about a doctor's appointment or a person's health.
 
     Reply with only the label, nothing else.
@@ -54,11 +70,7 @@ def router_agent(state: UserState):
     response = llm.invoke(prompt)
     intent = response.content.strip().lower()
 
-    if intent not in ["symptom", "self_care", "booking", "other"]:
-        intent = "symptom"
-
-    # red-flag symptoms always go through triage, whatever label the LLM picked
-    if check_red_flags(state["user_input"]) is not None:
+    if intent not in ["symptom", "health_info", "booking", "other"]:
         intent = "symptom"
 
     if intent == "other":
