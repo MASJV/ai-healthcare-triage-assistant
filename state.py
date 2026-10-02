@@ -11,6 +11,7 @@ class UserState(TypedDict):
     intent: str
     urgency: str
     triage_reason: str
+    symptom_text: str      # the user's messages triage judged as self_care
     follow_ups: int  
     booking_urgency: str   # urgency kept until the booking is done
     result: str

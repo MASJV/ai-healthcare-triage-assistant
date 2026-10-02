@@ -15,12 +15,13 @@ Each prefix is the patient's own messages up to one point in a conversation
 (1 to 3 rounds). As in the official CARE-Bench inputs, the rounds are joined
 into one message (separated by blank lines), since the benchmark has no
 assistant turns between them. That message goes through the app's path:
-    Router Agent -> self_care -> 0B self-care / monitor
-                 -> symptom   -> Triage Agent -> needs_more_info -> 0A info needed
-                                               -> routine/urgent  -> 1A non-urgent care
-                                               -> emergency       -> 1B urgent care
-                 -> booking   -> 1A non-urgent care (the scheduling agent books an appointment)
-                 -> other     -> 0A info needed (the app asks what the symptom is)
+    Router Agent -> health_info -> 0B self-care / monitor (the knowledge agent answers)
+                 -> symptom     -> Triage Agent -> needs_more_info -> 0A info needed
+                                                 -> self_care       -> 0B self-care / monitor
+                                                 -> routine/urgent  -> 1A non-urgent care
+                                                 -> emergency       -> 1B urgent care
+                 -> booking     -> 1A non-urgent care (the scheduling agent books an appointment)
+                 -> other       -> 0A info needed (the app asks what the symptom is)
 
 follow_ups is set to the number of earlier rounds (at most MAX_FOLLOW_UPS),
 so triage may still ask a follow-up in rounds 1 and 2 and must decide in round 3.
@@ -40,14 +41,16 @@ Run:
 
 import csv
 import json
+import time
 
 from langchain_core.messages import HumanMessage
 
 from config import MAX_FOLLOW_UPS
 from router_agent import router_agent
 from triage_agent import triage_agent
+from evaluation.latency import print_latency
 
-RUN_NAME = "v1"   # change for each run you want to keep, e.g. "v2"
+RUN_NAME = "v3"   # change for each run you want to keep, e.g. "v4"
 CASES_FILE = "evaluation/care_bench_public_test.jsonl"
 PREDICTIONS_FILE = f"evaluation/care_bench_predictions_{RUN_NAME}.csv"
 
@@ -103,7 +106,7 @@ def predict(patient_turns, round_id):
 
     intent = router_agent(state)["intent"]
 
-    if intent == "self_care":
+    if intent == "health_info":
         return SELF_CARE, intent, ""
     if intent == "booking":
         return NONURGENT, intent, ""
@@ -116,6 +119,8 @@ def predict(patient_turns, round_id):
         return URGENT, intent, urgency
     if urgency == "needs_more_info":
         return INFO_NEEDED, intent, urgency
+    if urgency == "self_care":
+        return SELF_CARE, intent, urgency
 
     return NONURGENT, intent, urgency
 
@@ -171,6 +176,7 @@ def run_eval():
     predictions = []
     wrong_cases = []
     missed_urgent = []
+    latencies = []
 
     total_per_label = {}
     correct_per_label = {}
@@ -188,7 +194,9 @@ def run_eval():
     for number, case in enumerate(cases, start=1):
 
         gold = case["gold_label"]
+        start = time.perf_counter()
         predicted, intent, urgency = predict(case["input_patient_turns"], case["round_id"])
+        latencies.append(time.perf_counter() - start)
 
         records.append((gold, predicted))
         predictions.append((case["prefix_id"], predicted))
@@ -254,6 +262,8 @@ def run_eval():
     print(f"Over-escalation (stronger action than gold):  {over}/{total}")
     print(f"Missed care (gold 1A/1B, answered 0A/0B):     {missed_care}/{needs_care}")
     print(f"Urgent false negatives (gold 1B, not 1B):     {len(missed_urgent)}/{total_per_label[URGENT]}")
+
+    print_latency(latencies)
     print(f"\nPredictions saved to {PREDICTIONS_FILE}")
 
     if missed_urgent:

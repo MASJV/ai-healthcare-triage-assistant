@@ -14,15 +14,19 @@ Run:
     python eval_triage.py
 """
 
+import time
+
 from langchain_core.messages import HumanMessage, AIMessage
 
 from triage_agent import triage_agent
 from evaluation.triage_test_cases import TEST_CASES
+from evaluation.latency import print_latency
 
-LABELS = ["emergency", "urgent", "routine", "needs_more_info"]
+LABELS = ["emergency", "urgent", "routine", "self_care", "needs_more_info"]
 
 # needs_more_info is not a level, so it is left out of under/over-triage
 SEVERITY = {
+    "self_care": 0,
     "routine": 1,
     "urgent": 2,
     "emergency": 3
@@ -51,6 +55,7 @@ def run_eval():
     wrong_cases = []
     under_triage = 0
     over_triage = 0
+    latencies = []
 
     # per-label counts
     total_per_label = {}
@@ -67,7 +72,9 @@ def run_eval():
             "follow_ups": case["follow_ups"]
         }
 
+        start = time.perf_counter()
         predicted = triage_agent(state)["urgency"]
+        latencies.append(time.perf_counter() - start)
         expected = case["expected"]
 
         total_per_label[expected] += 1
@@ -104,6 +111,8 @@ def run_eval():
 
     print(f"\nUnder-triage (level too low):  {under_triage}")
     print(f"Over-triage (level too high):  {over_triage}")
+
+    print_latency(latencies)
 
     if wrong_cases:
         print("\nWrong cases:")

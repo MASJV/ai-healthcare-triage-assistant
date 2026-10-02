@@ -11,6 +11,7 @@ import re
 
 import chromadb
 from langchain_core.messages import AIMessage
+from langsmith import traceable
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -86,6 +87,7 @@ def keep_top_chunks(scored_chunks, top_k):
     return top_chunks
 
 
+@traceable(name="vectorSearch")
 def vector_search(question, top_k):
     """
     Finds the top_k chunks whose meaning is closest to the question.
@@ -116,6 +118,7 @@ def vector_search(question, top_k):
     return matched_chunks
 
 
+@traceable(name="bm25Search")
 def bm25_search(question, top_k):
     """
     Finds the top_k chunks that best match the question's keywords.
@@ -129,6 +132,7 @@ def bm25_search(question, top_k):
     return keep_top_chunks(scored_chunks, top_k)
 
 
+@traceable(name="fuseResults")
 def fuse_results(vector_chunks, bm25_chunks):
     """
     Combines the vector list and the BM25 list into one list using
@@ -159,6 +163,7 @@ def fuse_results(vector_chunks, bm25_chunks):
     return keep_top_chunks(scored_chunks, len(scored_chunks))
 
 
+@traceable(name="rerankChunks")
 def rerank_chunks(question, chunks, top_k):
     """
     Re-scores every chunk against the question with the BGE cross-encoder
@@ -177,6 +182,7 @@ def rerank_chunks(question, chunks, top_k):
     return keep_top_chunks(scored_chunks, top_k)
 
 
+@traceable(name="expandQuery")
 def expand_query(question):
     """
     Adds medical terms to the question before searching, so everyday words
@@ -200,6 +206,7 @@ def expand_query(question):
     return f"{question} {response.content.strip()}"
 
 
+@traceable(name="retrieve")
 def retrieve(question):
     """
     Full retrieval pipeline: query expansion -> hybrid search -> fusion -> rerank.
@@ -227,6 +234,12 @@ def build_context_text(chunks):
 DISCLAIMER = (
     "Disclaimer: This is general self-care information, not a medical diagnosis. "
     "Please consult a doctor for medical advice."
+)
+
+# opening line when triage decided the user's problem can be managed at home
+SELF_CARE_LINE = (
+    "From what you have described, this can usually be managed at home for now. "
+    "If it gets worse or new symptoms appear, tell me and I can help you book an appointment."
 )
 
 # a number (or ½, ¼, ¾) followed by a unit that is always a medicine dose, e.g. "2 tablets", "½ tablet"
@@ -257,6 +270,7 @@ def has_dose(sentence):
     return False
 
 
+@traceable(name="removeDoses")
 def remove_doses(answer):
     """
     Safety check in code: the prompt says never give a dose, but the model
@@ -286,7 +300,15 @@ def remove_doses(answer):
 #Knowledge Agent
 def knowledge_agent(state: UserState):
 
-    chunks = retrieve(state["user_input"])
+    # triage sent this here as self_care: search with all the user's messages
+    # about the problem, not only the last answer to a follow-up question
+    from_triage = state.get("urgency", "") == "self_care"
+    if from_triage and state.get("symptom_text"):
+        question = state["symptom_text"]
+    else:
+        question = state["user_input"]
+
+    chunks = retrieve(question)
 
     prompt = f"""
     You are a healthcare self-care information assistant.
@@ -324,7 +346,7 @@ def knowledge_agent(state: UserState):
     Context:
     {build_context_text(chunks)}
 
-    User Message: {state['user_input']}
+    User Message: {question}
     """
 
     response = config.llm.invoke(prompt)
@@ -334,6 +356,9 @@ def knowledge_agent(state: UserState):
     for number, chunk_info in enumerate(chunks, start=1):
         source_lines.append(f"[{number}] {chunk_info['title']} - {chunk_info['url']}")
     sources = "\n".join(source_lines)
+
+    if from_triage:
+        answer_text = f"{SELF_CARE_LINE}\n\n{answer_text}"
 
     answer = f"{answer_text}\n\n{DISCLAIMER}\n\nSources:\n{sources}"
 

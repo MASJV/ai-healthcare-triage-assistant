@@ -1,6 +1,7 @@
 import re
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from langsmith import traceable
 
 from state import UserState, format_history
 from config import llm, MAX_FOLLOW_UPS
@@ -24,6 +25,7 @@ EMERGENCY_KEYWORDS = [
 
 
 #Rule-Based Filter
+@traceable(name="checkRedFlags")
 def check_red_flags(user_input):
 
     message = user_input.lower()
@@ -58,10 +60,10 @@ def triage_agent(state: UserState):
                       (e.g. "he hit his head" -> did he pass out, vomit,
                       or seem confused?)
     """
-        levels = "emergency / urgent / routine / needs_more_info"
+        levels = "emergency / urgent / routine / self_care / needs_more_info"
     else:
         follow_up_option = ""
-        levels = "emergency / urgent / routine"
+        levels = "emergency / urgent / routine / self_care"
 
     # LLM reasoning for the ones which were not caught
     prompt = f"""
@@ -73,13 +75,25 @@ def triage_agent(state: UserState):
     You are a medical triage assistant. Using the whole conversation,
     decide how soon the user needs care.
 
-    emergency - life-threatening, needs care right now
-                (e.g. severe pain, breathing trouble, confusion, heavy bleeding)
+    emergency - needs care right now: life-threatening, or time-critical
+                even without severe pain
+                (e.g. severe pain, breathing trouble, confusion, heavy
+                bleeding, sudden change in vision, new numbness or weakness,
+                a child who is unusually drowsy or hard to wake, bleeding or
+                strong pain in pregnancy, a new or different symptom in
+                someone with a serious past heart or brain condition)
     urgent    - should see a doctor within 24-48 hours
                 (e.g. high fever for 3+ days, worsening pain, infection signs)
-    routine   - can wait for a normal appointment
-                (e.g. mild symptoms, follow-ups, check-ups)
+    routine   - should see a doctor, but it can wait for a normal appointment
+                (e.g. the user asks to see a doctor, medicine refills,
+                check-ups, a problem that has lasted weeks or keeps coming
+                back, something a doctor needs to examine)
+    self_care - mild, recent or familiar problem with no warning signs that
+                can be managed at home and watched; see a doctor only if it
+                gets worse or does not improve
+                (e.g. a small cut, a minor bruise, a mild sunburn)
     {follow_up_option}
+    If the user asks to see a doctor, do not choose self_care.
     If you are unsure between two levels, choose the more serious one.
 
     Reply in exactly this format:
@@ -112,14 +126,24 @@ def triage_agent(state: UserState):
             "messages": [AIMessage(content=question)]
         }
 
-    # unclear answer -> treared as urgent
-    if urgency not in ["emergency", "urgent", "routine"]:
+    # unclear answer -> treated as urgent
+    if urgency not in ["emergency", "urgent", "routine", "self_care"]:
         urgency = "urgent"
+
+    # the user's messages for this problem: the first one plus the answers
+    # to each follow-up question, so the knowledge agent can search with them
+    user_messages = []
+    for message in state["messages"]:
+        if isinstance(message, HumanMessage):
+            user_messages.append(message.content)
+    case_size = follow_ups + 1
+    symptom_text = " ".join(user_messages[-case_size:])
 
     return {
         "urgency": urgency,
         "triage_reason": reason,
-        "follow_ups": 0
+        "follow_ups": 0,
+        "symptom_text": symptom_text
     }
 
 
@@ -130,5 +154,8 @@ def triage_route(state: UserState):
 
     if state["urgency"] == "needs_more_info":
         return "Ask User"
+
+    if state["urgency"] == "self_care":
+        return "Knowledge Agent"
 
     return "Scheduling Agent"

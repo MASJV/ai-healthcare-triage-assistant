@@ -8,12 +8,15 @@ Run:
     python eval_router.py
 """
 
+import time
+
 from langchain_core.messages import HumanMessage, AIMessage
 
 from router_agent import router_agent
 from evaluation.router_test_cases import TEST_CASES
+from evaluation.latency import print_latency
 
-LABELS = ["symptom", "self_care", "booking", "other"]
+LABELS = ["symptom", "health_info", "booking", "other"]
 
 
 def build_messages(history, message):
@@ -36,6 +39,7 @@ def run_eval():
 
     correct = 0
     wrong_cases = []
+    latencies = []
 
     # per-label counts
     total_per_label = {}
@@ -51,7 +55,9 @@ def run_eval():
             "user_input": case["message"]
         }
 
+        start = time.perf_counter()
         predicted = router_agent(state)["intent"]
+        latencies.append(time.perf_counter() - start)
         expected = case["expected"]
 
         total_per_label[expected] += 1
@@ -64,7 +70,7 @@ def run_eval():
             wrong_cases.append((number, case, predicted))
             status = "FAIL"
 
-        print(f"[{number:02d}] {status}  expected={expected:<9}  predicted={predicted:<9}  {case['message']}")
+        print(f"[{number:02d}] {status}  expected={expected:<11}  predicted={predicted:<11}  {case['message']}")
 
     total = len(TEST_CASES)
     accuracy = correct / total * 100
@@ -78,7 +84,9 @@ def run_eval():
         label_correct = correct_per_label[label]
         if label_total > 0:
             label_accuracy = label_correct / label_total * 100
-            print(f"  {label:<9} {label_correct}/{label_total} = {label_accuracy:.1f}%")
+            print(f"  {label:<11} {label_correct}/{label_total} = {label_accuracy:.1f}%")
+
+    print_latency(latencies)
 
     if wrong_cases:
         print("\nWrong cases:")

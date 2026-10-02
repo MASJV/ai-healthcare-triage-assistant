@@ -166,7 +166,7 @@ def run_eval():
         state = {
             "messages": [],
             "user_input": case["message"],
-            "intent": "self_care"
+            "intent": "health_info"
         }
 
         result = knowledge_agent(state)["result"]

@@ -6,7 +6,7 @@ Each case has:
     scenario - short tag of what the case checks
     history  - earlier messages as (role, text); role is "user" or "assistant"
     message  - the latest user message the router has to classify
-    expected - the correct label: symptom / self_care / booking / other
+    expected - the correct label: symptom / health_info / booking / other
 """
 
 # replies the agents really give, reused in the history below
@@ -25,7 +25,7 @@ COLD_SELF_CARE_REPLY = (
 
 TEST_CASES = [
 
-    # ---------- symptom (14) ----------
+    # ---------- symptom (19) ----------
     {
         "scenario": "plain symptom",
         "history": [],
@@ -121,82 +121,82 @@ TEST_CASES = [
         "message": "wait, my chest feels tight and I'm sweating a lot right now",
         "expected": "symptom"
     },
-
-    # ---------- self_care (12) ----------
     {
-        "scenario": "plain home care",
+        "scenario": "minor injury, asks for home care",
+        "history": [],
+        "message": "how do I clean a small cut on my finger?",
+        "expected": "symptom"
+    },
+    {
+        "scenario": "home care for a current problem",
         "history": [],
         "message": "How do I treat a mild sunburn at home?",
-        "expected": "self_care"
+        "expected": "symptom"
     },
     {
-        "scenario": "home care that mentions a symptom",
+        "scenario": "diet for a current symptom",
         "history": [],
         "message": "What should I eat when I have loose motions?",
-        "expected": "self_care"
+        "expected": "symptom"
     },
     {
-        "scenario": "home remedies",
+        "scenario": "home remedies for a current symptom",
         "history": [],
         "message": "any home remedies for a blocked nose?",
-        "expected": "self_care"
+        "expected": "symptom"
     },
+    {
+        "scenario": "activity advice with a current cold",
+        "history": [],
+        "message": "Is it okay to go to the gym when I have a cold?",
+        "expected": "symptom"
+    },
+
+    # ---------- health_info (7) ----------
     {
         "scenario": "general wellness",
         "history": [],
         "message": "How much water should an adult drink in a day?",
-        "expected": "self_care"
-    },
-    {
-        "scenario": "activity advice",
-        "history": [],
-        "message": "Is it okay to go to the gym when I have a cold?",
-        "expected": "self_care"
-    },
-    {
-        "scenario": "first aid at home",
-        "history": [],
-        "message": "how do I clean a small cut on my finger?",
-        "expected": "self_care"
+        "expected": "health_info"
     },
     {
         "scenario": "prevention with red-flag word",
         "history": [],
         "message": "What are some ways to lower my risk of a heart attack?",
-        "expected": "self_care"
+        "expected": "health_info"
     },
     {
         "scenario": "health knowledge",
         "history": [],
         "message": "What's the difference between a cold and the flu?",
-        "expected": "self_care"
+        "expected": "health_info"
     },
     {
         "scenario": "typos",
         "history": [],
         "message": "wat is ORS and how do i make it at home",
-        "expected": "self_care"
+        "expected": "health_info"
     },
     {
         "scenario": "hinglish",
         "history": [],
         "message": "garmi mein heatstroke se kaise bache?",
-        "expected": "self_care"
+        "expected": "health_info"
     },
     {
         "scenario": "known condition, asks for diet",
         "history": [],
         "message": "My doctor said I have high BP, what diet changes should I make?",
-        "expected": "self_care"
+        "expected": "health_info"
     },
     {
-        "scenario": "follow-up on a self-care answer",
+        "scenario": "follow-up on a health answer",
         "history": [
             ("user", "how do I get rid of a cold quickly?"),
             ("assistant", COLD_SELF_CARE_REPLY)
         ],
         "message": "how many times a day should I do the steam?",
-        "expected": "self_care"
+        "expected": "health_info"
     },
 
     # ---------- booking (12) ----------
@@ -267,7 +267,7 @@ TEST_CASES = [
         "expected": "booking"
     },
     {
-        "scenario": "switch from self-care to booking",
+        "scenario": "switch from health info to booking",
         "history": [
             ("user", "how do I get rid of a cold quickly?"),
             ("assistant", COLD_SELF_CARE_REPLY)

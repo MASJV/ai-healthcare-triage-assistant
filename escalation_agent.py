@@ -1,5 +1,6 @@
 import re
 from langchain_core.messages import AIMessage, HumanMessage
+from langsmith import traceable
 from state import UserState
 from config import llm
 
@@ -149,6 +150,7 @@ GENERAL_STEPS = [
 CLOSING = "This assistant cannot replace emergency services. Please get help now."
 
 
+@traceable(name="findCategoriesByKeywords")
 def find_categories_by_keywords(text):
     """
     Returns the category of every emergency type whose keywords
@@ -166,6 +168,7 @@ def find_categories_by_keywords(text):
     return categories
 
 
+@traceable(name="findCategoriesByLlm")
 def find_categories_by_llm(text):
     """
     Asks the LLM only to pick category names from the fixed list, so
@@ -207,6 +210,7 @@ def find_categories_by_llm(text):
     return categories
 
 
+@traceable(name="findFirstAidSteps")
 def find_first_aid_steps(categories):
     """
     Returns the fixed steps from FIRST_AID for the given categories,

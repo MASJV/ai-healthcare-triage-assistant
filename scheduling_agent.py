@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime, timedelta
 
 from langchain_core.messages import AIMessage
+from langsmith import traceable
 
 import config
 from state import UserState, format_history
@@ -251,6 +252,7 @@ def format_slot(slot):
     return datetime.strptime(slot, SLOT_FORMAT).strftime("%a %d %b, %I:%M %p")
 
 
+@traceable(name="listFreeSlots")
 def list_free_slots(connection, urgency, date=""):
     """
     Free slots grouped by day, one line per day:
@@ -282,6 +284,7 @@ def list_free_slots(connection, urgency, date=""):
 
 
 #Understanding the Request
+@traceable(name="readRequest")
 def read_request(state):
     """
     Asks the LLM to pull out action, name, phone, date and time from the
