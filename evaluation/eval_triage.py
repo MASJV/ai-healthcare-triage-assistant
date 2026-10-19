@@ -11,15 +11,15 @@ Besides accuracy it counts:
                    the safe mistake
 
 Run:
-    python eval_triage.py
+    python -m evaluation.eval_triage
 """
 
 import time
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from triage_agent import triage_agent
-from evaluation.triage_test_cases import TEST_CASES
+from agents.triage_agent import triage_agent
+from evaluation.test_cases.triage_test_cases import TEST_CASES
 from evaluation.latency import print_latency
 
 LABELS = ["emergency", "urgent", "routine", "self_care", "needs_more_info"]

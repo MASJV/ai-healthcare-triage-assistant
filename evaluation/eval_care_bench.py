@@ -3,7 +3,7 @@ eval_care_bench.py
 
 External validation on CARE-Bench Public Test 1 (62 cases, 135 labelled prefixes).
 
-Cases:  evaluation/care_bench_public_test.jsonl, the public_test_1 rows of
+Cases:  evaluation/care_bench/care_bench_public_test.jsonl, the public_test_1 rows of
         data/public/evaluation_prefixes_public.jsonl from
         https://github.com/ningkko/CARE-bench (CC BY-NC 4.0)
 Source: CARE-Bench: Benchmarking Patient-Facing LLM Triage.
@@ -31,12 +31,12 @@ Triage level "urgent" (doctor within 24-48 hours) counts as 1A, not 1B:
 Metrics follow the official scorer (code/score_label_submission.py):
 accuracy, macro-F1, under- and over-escalation, missed care, and urgent
 false negatives (1B cases not sent to 1B), with every missed 1B case listed.
-Predictions are saved to evaluation/care_bench_predictions_<RUN_NAME>.csv
+Predictions are saved to evaluation/care_bench/care_bench_predictions_<RUN_NAME>.csv
 (prefix_id,predicted_label), so runs before and after a change can be compared
 and checked with the official scorer.
 
 Run:
-    python eval_care_bench.py
+    python -m evaluation.eval_care_bench
 """
 
 import csv
@@ -46,13 +46,13 @@ import time
 from langchain_core.messages import HumanMessage
 
 from config import MAX_FOLLOW_UPS
-from router_agent import router_agent
-from triage_agent import triage_agent
+from agents.router_agent import router_agent
+from agents.triage_agent import triage_agent
 from evaluation.latency import print_latency
 
 RUN_NAME = "v4_jev"   # change for each run you want to keep
-CASES_FILE = "evaluation/care_bench_public_test.jsonl"
-PREDICTIONS_FILE = f"evaluation/care_bench_predictions_{RUN_NAME}.csv"
+CASES_FILE = "evaluation/care_bench/care_bench_public_test.jsonl"
+PREDICTIONS_FILE = f"evaluation/care_bench/care_bench_predictions_{RUN_NAME}.csv"
 
 INFO_NEEDED = "0A_NO_ESCALATION_INFO_NEEDED"
 SELF_CARE = "0B_NO_ESCALATION_SELF_CARE_MONITOR"

@@ -27,7 +27,7 @@ when to see a doctor is removed before grading: it is never in the chunks,
 so the judge would count it as an unsupported claim.
 
 Run:
-    python eval_knowledge.py
+    python -m evaluation.eval_knowledge
 """
 
 import re
@@ -36,8 +36,8 @@ from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
 from deepeval.test_case import LLMTestCase
 
 import config
-from knowledge_agent import knowledge_agent, retrieve, DISCLAIMER
-from evaluation.knowledge_test_cases import TEST_CASES
+from agents.knowledge_agent import knowledge_agent, retrieve, DISCLAIMER
+from evaluation.test_cases.knowledge_test_cases import TEST_CASES
 
 TYPES = ["answer", "no_info", "no_dose"]
 RUN_DEEPEVAL = True   # False = Python checks only, no judge cost

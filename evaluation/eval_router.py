@@ -5,15 +5,15 @@ Runs the Router Agent on the 50 cases in router_test_cases.py
 and prints the accuracy.
 
 Run:
-    python eval_router.py
+    python -m evaluation.eval_router
 """
 
 import time
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from router_agent import router_agent
-from evaluation.router_test_cases import TEST_CASES
+from agents.router_agent import router_agent
+from evaluation.test_cases.router_test_cases import TEST_CASES
 from evaluation.latency import print_latency
 
 LABELS = ["symptom", "health_info", "booking", "other"]

@@ -5,11 +5,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
 
 from state import UserState
-from router_agent import router_agent, route
-from triage_agent import triage_agent, triage_route
-from knowledge_agent import knowledge_agent
-from scheduling_agent import scheduling_agent
-from escalation_agent import escalation_agent
+from agents.router_agent import router_agent, route
+from agents.triage_agent import triage_agent, triage_route
+from agents.knowledge_agent import knowledge_agent
+from agents.scheduling_agent import scheduling_agent
+from agents.escalation_agent import escalation_agent
 
 
 #Build Graph

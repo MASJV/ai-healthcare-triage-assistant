@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from state import UserState, format_history
 from config import llm, USE_JEV, SYMPTOM_THRESHOLD
-from triage_agent import check_red_flags
+from agents.triage_agent import check_red_flags
 from jev import jev_choice, conversation_list
 
 

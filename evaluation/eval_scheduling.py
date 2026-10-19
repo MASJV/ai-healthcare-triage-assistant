@@ -11,15 +11,15 @@ before comparing, the same way the agent does before booking.
 A case passes only if all five fields are right.
 
 Run:
-    python eval_scheduling.py
+    python -m evaluation.eval_scheduling
 """
 
 from datetime import datetime
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from scheduling_agent import read_request, clean_phone
-from evaluation.scheduling_test_cases import TEST_CASES
+from agents.scheduling_agent import read_request, clean_phone
+from evaluation.test_cases.scheduling_test_cases import TEST_CASES
 
 FIELDS = ["action", "name", "phone", "date", "time"]
 ACTIONS = ["book", "reschedule", "cancel", "check", "none"]
