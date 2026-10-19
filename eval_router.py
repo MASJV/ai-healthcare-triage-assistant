@@ -56,8 +56,10 @@ def run_eval():
         }
 
         start = time.perf_counter()
-        predicted = router_agent(state)["intent"]
+        output = router_agent(state)
         latencies.append(time.perf_counter() - start)
+        predicted = output["intent"]
+        probabilities = output.get("router_probabilities", {})
         expected = case["expected"]
 
         total_per_label[expected] += 1
@@ -67,7 +69,7 @@ def run_eval():
             correct_per_label[expected] += 1
             status = "PASS"
         else:
-            wrong_cases.append((number, case, predicted))
+            wrong_cases.append((number, case, predicted, probabilities))
             status = "FAIL"
 
         print(f"[{number:02d}] {status}  expected={expected:<11}  predicted={predicted:<11}  {case['message']}")
@@ -90,10 +92,12 @@ def run_eval():
 
     if wrong_cases:
         print("\nWrong cases:")
-        for number, case, predicted in wrong_cases:
+        for number, case, predicted, probabilities in wrong_cases:
             print(f"  [{number:02d}] {case['scenario']}")
             print(f"       message:   {case['message']}")
             print(f"       expected:  {case['expected']}   predicted: {predicted}")
+            if probabilities:
+                print(f"       probabilities: {probabilities}")
 
 
 if __name__ == "__main__":

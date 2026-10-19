@@ -25,7 +25,7 @@ COLD_SELF_CARE_REPLY = (
 
 TEST_CASES = [
 
-    # ---------- symptom (19) ----------
+    # ---------- symptom (20) ----------
     {
         "scenario": "plain symptom",
         "history": [],
@@ -151,6 +151,15 @@ TEST_CASES = [
         "message": "Is it okay to go to the gym when I have a cold?",
         "expected": "symptom"
     },
+    {
+        "scenario": "asks for a doctor about a problem from earlier",
+        "history": [
+            ("user", "how do I get rid of a cold quickly?"),
+            ("assistant", COLD_SELF_CARE_REPLY)
+        ],
+        "message": "ok can I just see a doctor about it then?",
+        "expected": "symptom"
+    },
 
     # ---------- health_info (7) ----------
     {
@@ -199,7 +208,7 @@ TEST_CASES = [
         "expected": "health_info"
     },
 
-    # ---------- booking (12) ----------
+    # ---------- booking (11) ----------
     {
         "scenario": "plain booking",
         "history": [],
@@ -264,15 +273,6 @@ TEST_CASES = [
             ("assistant", SLOTS_REPLY)
         ],
         "message": "the 10:30 one works",
-        "expected": "booking"
-    },
-    {
-        "scenario": "switch from health info to booking",
-        "history": [
-            ("user", "how do I get rid of a cold quickly?"),
-            ("assistant", COLD_SELF_CARE_REPLY)
-        ],
-        "message": "ok can I just see a doctor about it then?",
         "expected": "booking"
     },
     {

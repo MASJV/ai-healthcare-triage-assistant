@@ -138,6 +138,12 @@ if submitted and user_input.strip():
             "triage_reason": result["triage_reason"] or "-",
             "latency_seconds": round(latency, 2)
         }
+
+        # Jev's probability for each router label (only when USE_JEV is on)
+        if result.get("router_probabilities"):
+            st.session_state.details["router_probabilities"] = result["router_probabilities"]
+        if result.get("triage_probabilities"):
+            st.session_state.details["triage_probabilities"] = result["triage_probabilities"]
         st.session_state.reply = result["result"]
 
     st.toast("✅ Message received.")
