@@ -73,8 +73,10 @@ def run_eval():
         }
 
         start = time.perf_counter()
-        predicted = triage_agent(state)["urgency"]
+        output = triage_agent(state)
         latencies.append(time.perf_counter() - start)
+        predicted = output["urgency"]
+        probabilities = output.get("triage_probabilities", {})
         expected = case["expected"]
 
         total_per_label[expected] += 1
@@ -84,7 +86,7 @@ def run_eval():
             correct_per_label[expected] += 1
             status = "PASS"
         else:
-            wrong_cases.append((number, case, predicted))
+            wrong_cases.append((number, case, predicted, probabilities))
             status = "FAIL"
 
             if expected in SEVERITY and predicted in SEVERITY:
@@ -116,10 +118,12 @@ def run_eval():
 
     if wrong_cases:
         print("\nWrong cases:")
-        for number, case, predicted in wrong_cases:
+        for number, case, predicted, probabilities in wrong_cases:
             print(f"  [{number:02d}] {case['scenario']}")
             print(f"       message:   {case['message']}")
             print(f"       expected:  {case['expected']}   predicted: {predicted}")
+            if probabilities:
+                print(f"       probabilities: {probabilities}")
 
 
 if __name__ == "__main__":

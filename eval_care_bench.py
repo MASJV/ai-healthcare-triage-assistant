@@ -50,7 +50,7 @@ from router_agent import router_agent
 from triage_agent import triage_agent
 from evaluation.latency import print_latency
 
-RUN_NAME = "v3"   # change for each run you want to keep, e.g. "v4"
+RUN_NAME = "v4_jev"   # change for each run you want to keep
 CASES_FILE = "evaluation/care_bench_public_test.jsonl"
 PREDICTIONS_FILE = f"evaluation/care_bench_predictions_{RUN_NAME}.csv"
 

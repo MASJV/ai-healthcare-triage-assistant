@@ -31,6 +31,15 @@ TOP_K_BM25 = 10     # how many chunks to get from keyword search
 TOP_K_FINAL = 4     # how many chunks to keep after reranking
 RRF_K = 60          # standard Reciprocal Rank Fusion constant
 
+# --- Jev (TypeSafe decision model, via OpenRouter) ---
+USE_JEV = True   # True: the router and triage decide with Jev; False: with CHAT_MODEL
+JEV_MODEL = "typesafe/jev-1.13"
+JEV_URL = "https://openrouter.ai/api/alpha/decisions"
+# when Jev picks another label but gives symptom at least this probability,
+# the message still goes to triage: an extra triage check costs one call,
+# a missed one can leave a health problem unassessed
+SYMPTOM_THRESHOLD = 0.30
+
 # --- Triage settings ---
 MAX_FOLLOW_UPS = 2  # follow-up questions triage may ask before it must decide
 

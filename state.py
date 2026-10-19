@@ -9,8 +9,10 @@ class UserState(TypedDict):
     messages: Annotated[list, add_messages]   
     user_input: str
     intent: str
+    router_probabilities: dict   # Jev's probability for each label (empty without Jev)
     urgency: str
     triage_reason: str
+    triage_probabilities: dict   # Jev's probability for each level (empty without Jev)
     symptom_text: str      # the user's messages triage judged as self_care
     follow_ups: int  
     booking_urgency: str   # urgency kept until the booking is done
