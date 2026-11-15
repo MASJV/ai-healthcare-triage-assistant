@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage
 
 from symptomTriage import app
 
-st.set_page_config(page_title="Symptom Triage & Appointment Scheduler")
+st.set_page_config(page_title="AI Healthcare Triage Assistant")
 
 
 def set_seamless_bg_with_sidebar_border(image_file):
@@ -31,7 +31,7 @@ def set_seamless_bg_with_sidebar_border(image_file):
             background-image: none !important;
 
             /* EXPLICIT SIDEBAR BORDERS & SEPARATION */
-            border-right: 2px solid rgba(255, 90, 69, 0.4) !important;
+            border-right: 2px solid rgba(30, 136, 229, 0.5) !important;
             box-shadow: 5px 0px 15px rgba(0, 0, 0, 0.5);
 
             /* Subtle dark tint overlay so text remains readable */
@@ -41,17 +41,21 @@ def set_seamless_bg_with_sidebar_border(image_file):
             ) !important;
         }}
 
+        [data-testid="stHeader"] {{
+            background-color: transparent !important;
+        }}
+
         [data-testid="stSidebarHeader"] {{
             background-color: transparent !important;
         }}
 
         .stApp h1, .stApp h2, .stApp h3 {{
-            border-bottom: 3px solid #FF5A45;
+            border-bottom: 3px solid #1E88E5;
             padding-bottom: 0.35rem;
         }}
 
         .stButton > button, .stFormSubmitButton > button {{
-            background-color: #FF5A45;
+            background-color: #1E88E5;
             color: #ffffff;
             border: none;
             border-radius: 8px;
@@ -59,13 +63,13 @@ def set_seamless_bg_with_sidebar_border(image_file):
         }}
 
         .stButton > button:hover, .stFormSubmitButton > button:hover {{
-            background-color: #e14a36;
+            background-color: #1565C0;
             color: #ffffff;
         }}
 
         [data-testid="stJson"] {{
             background-color: #12172A;
-            border: 1px solid #FF5A45;
+            border: 1px solid #1E88E5;
             border-radius: 10px;
             padding: 0.75rem;
         }}
@@ -78,7 +82,7 @@ def set_seamless_bg_with_sidebar_border(image_file):
 set_seamless_bg_with_sidebar_border("assets/triage_bg.png")
 
 st.markdown(
-    "<h1 style='text-align: center;'>🩺 Symptom Triage & Appointment Scheduler</h1>",
+    "<h1 style='text-align: center;'>🩺 AI Healthcare Triage Assistant</h1>",
     unsafe_allow_html=True,
 )
 
@@ -101,52 +105,20 @@ if "reply" not in st.session_state:
     st.session_state.reply = ""
 
 
-with st.form("message_form", clear_on_submit=True):
-    user_input = st.text_input("Describe your symptom or what you need")
-    submitted = st.form_submit_button("Send")
+# what each agent did, shown while the message is being processed
+STEP_TEXT = {
+    "Router Agent": "Understood the request",
+    "Triage Agent": "Checked how urgent it is",
+    "Knowledge Agent": "Searched the health documents",
+    "Scheduling Agent": "Checked the appointment slots",
+    "Escalation Agent": "Prepared emergency guidance"
+}
 
-if submitted and user_input.strip():
-    with st.spinner("🩺 Reading your message..."):
-        # run_name labels each turn in LangSmith when tracing is on
-        session = {
-            "configurable": {"thread_id": st.session_state.thread_id},
-            "run_name": "symptom-triage-scheduler"
-        }
 
-        start = time.perf_counter()
-
-        # per-turn fields are reset; messages and follow_ups carry over
-        result = app.invoke(
-            {
-                "user_input": user_input,
-                "messages": [HumanMessage(content=user_input)],
-                "intent": "",
-                "urgency": "",
-                "triage_reason": "",
-                "result": ""
-            },
-            session
-        )
-        latency = time.perf_counter() - start
-
-        st.session_state.conversation.append({"role": "You", "text": user_input})
-        st.session_state.conversation.append({"role": "Assistant", "text": result["result"]})
-
-        st.session_state.details = {
-            "intent": result["intent"],
-            "urgency": result["urgency"] or "-",
-            "triage_reason": result["triage_reason"] or "-",
-            "latency_seconds": round(latency, 2)
-        }
-
-        # Jev's probability for each router label (only when USE_JEV is on)
-        if result.get("router_probabilities"):
-            st.session_state.details["router_probabilities"] = result["router_probabilities"]
-        if result.get("triage_probabilities"):
-            st.session_state.details["triage_probabilities"] = result["triage_probabilities"]
-        st.session_state.reply = result["result"]
-
-    st.toast("✅ Message received.")
+def show_conversation():
+    for item in st.session_state.conversation:
+        st.caption(item["role"])
+        st.markdown(item["text"])
 
 
 with st.sidebar:
@@ -155,16 +127,88 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    if st.button("New conversation"):
+    if st.button("New conversation", width="stretch"):
         st.session_state.thread_id = str(uuid.uuid4())
         st.session_state.conversation = []
         st.session_state.details = {}
         st.session_state.reply = ""
         st.rerun()
 
-    for item in st.session_state.conversation:
-        st.caption(item["role"])
-        st.markdown(item["text"])
+    # filled again after each reply, so the new message shows up at once
+    history = st.empty()
+    with history.container():
+        show_conversation()
+
+
+with st.form("message_form", clear_on_submit=True):
+    user_input = st.text_input("Describe your symptom or what you need")
+    submitted = st.form_submit_button("Send")
+
+if submitted and user_input.strip():
+    # the user's message appears in the sidebar before the agents run
+    st.session_state.conversation.append({"role": "You", "text": user_input})
+    with history.container():
+        show_conversation()
+
+    st.markdown(f"**You:** {user_input}")
+
+    with st.status("🩺 Working on your message...", expanded=True) as status:
+        # run_name labels each turn in LangSmith when tracing is on
+        session = {
+            "configurable": {"thread_id": st.session_state.thread_id},
+            "run_name": "symptom-triage-scheduler"
+        }
+
+        start = time.perf_counter()
+
+        # per-turn fields are reset; messages and follow_ups carry over.
+        # stream() gives the output of each agent as soon as it finishes
+        for update in app.stream(
+            {
+                "user_input": user_input,
+                "messages": [HumanMessage(content=user_input)],
+                "intent": "",
+                "urgency": "",
+                "triage_reason": "",
+                "result": ""
+            },
+            session,
+            stream_mode="updates"
+        ):
+            for agent, output in update.items():
+                text = STEP_TEXT.get(agent, agent)
+                if agent == "Router Agent" and output:
+                    text += f": {output.get('intent', '')}"
+                if agent == "Triage Agent" and output:
+                    text += f": {output.get('urgency', '')}"
+                st.write(f"✔️ {text}")
+
+        latency = time.perf_counter() - start
+        result = app.get_state(session).values
+
+        status.update(
+            label=f"✅ Done in {latency:.1f} s",
+            state="complete",
+            expanded=False
+        )
+
+    st.session_state.conversation.append({"role": "Assistant", "text": result["result"]})
+    with history.container():
+        show_conversation()
+
+    st.session_state.details = {
+        "intent": result["intent"],
+        "urgency": result["urgency"] or "-",
+        "triage_reason": result["triage_reason"] or "-",
+        "latency_seconds": round(latency, 2)
+    }
+
+    # Jev's probability for each router label (only when USE_JEV is on)
+    if result.get("router_probabilities"):
+        st.session_state.details["router_probabilities"] = result["router_probabilities"]
+    if result.get("triage_probabilities"):
+        st.session_state.details["triage_probabilities"] = result["triage_probabilities"]
+    st.session_state.reply = result["result"]
 
 
 if st.session_state.reply:
