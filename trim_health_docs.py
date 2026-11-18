@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 
 SRC = Path("health_docs")
-OUT = Path("health_docs_clean")
+OUT = Path("health_docs_clean/health_docs_clean")
 
 
 def front(title: str, source: str, url: str) -> str:

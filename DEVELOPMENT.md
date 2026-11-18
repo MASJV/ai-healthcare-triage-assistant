@@ -105,4 +105,4 @@ Missed care moved to 3–5/74 with Jev because it asks a follow-up question more
 | Router + Triage, CARE-Bench (135 prefixes) | v3, gpt-4o-mini | 1.51 | 1.72 | 2.64 | 3.07 |
 | Router + Triage, CARE-Bench (135 prefixes) | v4, Jev | 1.61 | 1.65 | 2.78 | 5.51 |
 
-Jev cut the median decision time by about 20% in the router and 27% in triage. End to end the gain is small, because follow-up questions are still written by gpt-4o-mini, and the CARE-Bench median moved between 1.20 and 1.65 seconds across the three v4 runs. With gpt-4o-mini, red-flag keyword cases skip the router's LLM call, which pulls its averages down.
+Jev cut the median decision time by about 20% in the router and 28% in triage. End to end the gain is small, because follow-up questions are still written by gpt-4o-mini, and the CARE-Bench median moved between 1.20 and 1.65 seconds across the three v4 runs. With gpt-4o-mini, red-flag keyword cases skip the router's LLM call, which pulls its averages down.

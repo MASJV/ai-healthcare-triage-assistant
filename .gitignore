@@ -3,11 +3,11 @@ venv/
 __pycache__/
 .env
 !.env.example
-download_health_docs.py 
-health_docs_clean/
+health_docs/
+health_docs_clean/health_docs_clean/*
+!health_docs_clean/health_docs_clean/medlineplus/
 chroma_db/
 .deepeval/
 fixes.md
-data_sourcing.md
 appointments.db
 evaluation/__pycache__

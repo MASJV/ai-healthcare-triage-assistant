@@ -7,7 +7,7 @@ A multi-agent healthcare assistant built with LangGraph. It reads a user's messa
 - **Knowledge**: answers general health questions, and gives self-care advice when triage finds a problem can be managed at home, from public health documents using hybrid RAG, with citations
 - **Scheduling**: books, reschedules, cancels and checks appointments in a SQLite database
 
-The routing and triage decisions are made by **Jev**, TypeSafe AI's decision model; gpt-4o-mini writes the replies.
+The routing and triage decisions are made by **Jev**, TypeSafe AI's decision model; gpt-4o-mini writes the free-text replies (follow-up questions and knowledge answers).
 
 > **Disclaimer:** This assistant provides general health information and appointment support only. It is not a medical device, does not diagnose, and is not a substitute for professional medical advice. In an emergency, call 112 (emergency) or 108 (ambulance).
 
@@ -155,8 +155,8 @@ The database has one table, `slots`, with one row per 30-minute slot (`slot`, `s
 **Requirements:** Python 3.11 or newer (developed on 3.13), an OpenAI API key and an OpenRouter API key (for Jev).
 
 ```bash
-git clone https://github.com/MASJV/symptom-triage-scheduler.git
-cd symptom-triage-scheduler
+git clone https://github.com/MASJV/ai-healthcare-triage-assistant.git
+cd ai-healthcare-triage-assistant
 
 python -m venv .venv
 .venv\Scripts\activate            # Windows
@@ -205,7 +205,15 @@ The self-care corpus comes from public health sources:
 | Self-Care Forum fact sheets | Common ailments, self-care steps and when to seek help |
 | *Where There Is No Doctor* (Hesperian, 2025) | Selected chapters: home care, first aid, prevention, common illnesses |
 
-The documents were converted to Markdown with `title`, `source` and `url` front matter; the dosing reference section of *Where There Is No Doctor* was excluded on purpose, and no LLM-written content is part of the corpus. **The corpus is not included in this repository.** Place the Markdown files in `health_docs_clean/health_docs_clean/` and run `python ingest.py`. It splits on `##` headings, uses a 2,000-character window (250 overlap) for long sections, puts the document title at the start of every chunk, and stores the embeddings in a local Chroma collection (`chroma_db/`).
+The documents were converted to Markdown with `title`, `source` and `url` front matter; the dosing reference section of *Where There Is No Doctor* was excluded on purpose, and no LLM-written content is part of the corpus. The MedlinePlus files are included in `health_docs_clean/health_docs_clean/medlineplus/` (public domain; Source: MedlinePlus, National Library of Medicine). Self-Care Forum and *Where There Is No Doctor* content cannot be redistributed, so they are rebuilt locally:
+
+```bash
+python download_health_docs.py   # downloads all three sources into health_docs/ (~31 MB)
+python trim_health_docs.py       # converts them to Markdown in health_docs_clean/health_docs_clean/
+python ingest.py                 # chunks, embeds and stores them in chroma_db/
+```
+
+With only the included MedlinePlus files, `python ingest.py` works straight after cloning, on a smaller corpus than the one evaluated. Source choices and licensing are in [data_sourcing.md](data_sourcing.md). `ingest.py` splits on `##` headings, uses a 2,000-character window (250 overlap) for long sections, puts the document title at the start of every chunk, and stores the embeddings in a local Chroma collection (`chroma_db/`).
 
 ---
 
@@ -251,7 +259,7 @@ python -m evaluation.eval_care_bench
 
 ### Internal test sets
 
-Each eval runs the real agent on its test cases in `evaluation/test_cases/` and prints overall and per-label results, plus every wrong case. Prompts were improved against these sets, so the scores are optimistic; CARE-Bench below is the held-out check.
+Each eval runs the real agent on its test cases in `evaluation/test_cases/` and prints overall and per-label results, plus every wrong case. Prompts were tuned on these sets, so they measure development progress rather than generalisation; CARE-Bench below is the external check.
 
 | Agent | Cases | What they cover | Result |
 |---|---|---|---|
@@ -281,7 +289,7 @@ Each prefix goes through the app's path (Router Agent, then Triage Agent for sym
 | `1A` | non-urgent professional care | triage `routine` or `urgent`, or router `booking` |
 | `1B` | urgent or emergency care now | triage `emergency` |
 
-Comparison with the models published in the CARE-Bench repository on the same 135 prefixes, in the unprompted setting (patient text only), which is the closest match to this system:
+Comparison with the models published in the CARE-Bench repository ([results file](https://github.com/ningkko/CARE-bench/blob/main/results/mapped_predictions_public/mapped_predictions_public_summary.csv)) on the same 135 prefixes, in the unprompted setting (patient text only), which is the closest match to this system:
 
 | System | Accuracy | Macro-F1 | Missed care | Urgent false negatives |
 |---|---|---|---|---|
@@ -292,7 +300,7 @@ Comparison with the models published in the CARE-Bench repository on the same 13
 
 The published models' free-text replies were mapped to labels by an LLM; this system's fixed outputs are mapped directly, so the comparison is close but not identical.
 
-The target is safety: someone who needs care should not be told they can wait or manage at home. So the headline metrics are missed care, under-escalation and urgent false negatives, and missed care is at the best end of the published range. Accuracy and macro-F1 stay modest by design:
+The target is safety: someone who needs care should not be told they can wait or manage at home. So the headline metrics are missed care, under-escalation and urgent false negatives, and missed care is at the best end of the published range (tied with Claude Haiku 4.5). Accuracy and macro-F1 stay modest by design:
 - `0A` is 37 of the 135 prefixes, and CARE-Bench expects a question even on detailed first messages. This app asks only when a message is too vague to judge safely.
 - Over-escalation (54/135) comes from "if unsure, choose the more serious level", kept on purpose: sending someone to a doctor they did not need is the cheaper mistake.
 - Raising accuracy would mean tuning prompts to the benchmark and loosening that rule, so CARE-Bench is kept as a frozen safety stress test.
@@ -350,11 +358,12 @@ Settings live in `config.py`:
 
 | Problem | Fix |
 |---|---|
-| `Knowledge base not found. Run python ingest.py first.` | Run `python ingest.py` after placing the documents in `health_docs_clean/health_docs_clean/` |
+| `Knowledge base not found. Run python ingest.py first.` | Run `python ingest.py` (see Knowledge base above for rebuilding the full corpus) |
 | `sqlite3.OperationalError: table slots has no column named slot` | `appointments.db` was created by an older version; delete it and it is recreated on the next run |
 | Slow first start | The BGE reranker model (about 1 GB) downloads on first use |
 | `openai.AuthenticationError` | Check `OPENAI_API_KEY` in `.env` |
 | `Jev call failed ... 401 Unauthorized` | Check `OPENROUTER_API_KEY` in `.env`; gpt-4o-mini decides meanwhile |
+| Self-Care Forum or Hesperian answers missing | Only MedlinePlus is included; run `download_health_docs.py`, `trim_health_docs.py` and `ingest.py` |
 | Slot times look shifted | Slots follow the computer's local clock; check the system time zone |
 
 ---
@@ -374,3 +383,7 @@ Settings live in `config.py`:
 | Appointments | SQLite |
 | Evaluation | DeepEval (gpt-4.1-mini as judge) |
 | Tracing | LangSmith (optional) |
+
+## License
+
+Code is released under the [MIT License](LICENSE). Third-party data keeps its own terms: the CARE-Bench file in `evaluation/care_bench/` is CC BY-NC 4.0 (non-commercial use only), and the MedlinePlus documents are public domain (Source: MedlinePlus, National Library of Medicine).
