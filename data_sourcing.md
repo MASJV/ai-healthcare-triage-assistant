@@ -21,7 +21,7 @@ Answer general self-care health questions (common ailments, home care, when to s
 
 ## The NHS attempt
 
-NHS content was the first choice: each condition page has clear "things you can do yourself" and "when to get help" sections. We registered on the NHS developer hub and created an Integration test app. The API key was accepted by the gateway, but the integration environment's backend returned "Access Denied", which is outside our control. Production access requires a formal onboarding review and a signed connection agreement by a legal signatory, which is too heavy for a student project. We dropped NHS. The downloader still contains the NHS code, disabled, in case access becomes possible later.
+NHS content was the first choice: each condition page has clear "things you can do yourself" and "when to get help" sections. We registered on the NHS developer hub and created an Integration test app. The API key was accepted by the gateway, but the integration environment's backend returned "Access Denied", which is outside our control. Production access requires a formal onboarding review and a signed connection agreement by a legal signatory, which is too heavy for a student project. We dropped NHS, and its download code was later removed from the downloader.
 
 ## How the documents were collected
 
@@ -44,11 +44,11 @@ Result: 1,056 files, ~2.9 MB of text.
 
 ## Known limitations
 
-- Self-Care Forum sheets use UK services ("call 999 / 111"). The prompt should map these to Indian equivalents (112 / 108).
+- Self-Care Forum sheets use UK services ("call 999 / 111"). The knowledge prompt maps these to Indian equivalents (112 / 108).
 - Where There Is No Doctor is written for low-resource settings; some advice assumes no clinic nearby.
 - Two-column PDFs give slightly out-of-order text in places. The content is complete.
 - The folic acid fact sheet did not download (26 of 27 sheets).
-- Gaps remain for over-the-counter medicine questions and mental health; a web-search fallback restricted to trusted health domains is planned for these.
+- Gaps remain for over-the-counter medicine questions and mental health.
 
 ## Chunking and embeddings(as built)
 

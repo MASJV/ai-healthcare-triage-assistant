@@ -10,7 +10,7 @@ st.set_page_config(page_title="AI Healthcare Triage Assistant")
 # imported once per server process; on a new server the first import also
 # builds the health knowledge base (see ingest.ensure_knowledge_base)
 try:
-    with st.spinner("Starting the assistant...):
+    with st.spinner("Starting the assistant..."):
         from symptomTriage import app
 except Exception as error:
     if type(error).__name__ == "KnowledgeBaseError":

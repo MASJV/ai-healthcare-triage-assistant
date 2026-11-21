@@ -219,6 +219,8 @@ python trim_health_docs.py       # converts them to Markdown in health_docs_clea
 python ingest.py                 # chunks, embeds and stores them in chroma_db/
 ```
 
+The two extra scripts also need `pip install beautifulsoup4` and poppler's `pdftotext` on your PATH.
+
 With only the included MedlinePlus files, `python ingest.py` works straight after cloning, on a smaller corpus than the one evaluated. The Streamlit Community Cloud deployment uses this MedlinePlus-only corpus, since it only has the files tracked in Git; the other two sources are missing there because of their redistribution terms, not because of a ChromaDB or RAG limit. Source choices and licensing are in [data_sourcing.md](data_sourcing.md). `ingest.py` splits on `##` headings, uses a 2,000-character window (250 overlap) for long sections, puts the document title at the start of every chunk, and stores the embeddings in a local Chroma collection (`chroma_db/`).
 
 ---
@@ -331,7 +333,7 @@ Latency is measured in code, so it works without LangSmith: the router, triage a
 | Knowledge | 1 small chat call (query expansion) + 1 embedding call + 1 chat call |
 | Scheduling | 1 chat call |
 
-Estimated cost with gpt-4o-mini ($0.15 / $0.60 per 1M input / output tokens) is about $0.0003–$0.001 per message, and one-time ingestion is under $0.02. Jev charges only for input tokens and reports each call's cost in `usage.cost`; see the [Jev model page](https://openrouter.ai/typesafe/jev-1.13). Check the [OpenAI pricing page](https://developers.openai.com/api/docs/pricing) for current prices.
+Estimated cost with gpt-4o-mini ($0.15 / $0.60 per 1M input / output tokens) is about $0.0003–$0.001 per message, and each ingestion run is under $0.02. Jev charges only for input tokens and reports each call's cost in `usage.cost`; see the [Jev model page](https://openrouter.ai/typesafe/jev-1.13). Check the [OpenAI pricing page](https://developers.openai.com/api/docs/pricing) for current prices.
 
 ---
 
