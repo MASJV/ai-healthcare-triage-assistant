@@ -16,6 +16,7 @@ load_dotenv(override=True)
 CHAT_MODEL = "gpt-4o-mini"
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536  # full size of text-embedding-3-small
+EMBEDDING_PRICE_PER_1M_TOKENS = 0.02  # USD, text-embedding-3-small; only used for the cost estimate in ingest.py
 JUDGE_MODEL = "gpt-4.1-mini"  # grades the knowledge agent in eval_knowledge.py
 
 # --- Free local reranker model (no API cost) ---
@@ -56,6 +57,10 @@ SHOW_HOURS = 24      # free slots of the next 24 hours are shown to the user
 DOCS_FOLDER = "health_docs_clean/health_docs_clean"
 CHROMA_DIRECTORY = "chroma_db"
 COLLECTION_NAME = "health_docs"
+# the app builds the knowledge base itself when it is missing (see ingest.py);
+# it stops instead if the documents come to more tokens than this (~$0.04).
+# The full corpus is about 750k tokens. `python ingest.py` has no limit.
+MAX_AUTO_INGEST_TOKENS = 2_000_000
 
 # --- Shared LLM used by all agents ---
 llm = ChatOpenAI(

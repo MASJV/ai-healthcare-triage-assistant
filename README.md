@@ -1,5 +1,7 @@
 # AI Healthcare Triage Assistant
 
+**Live demo:** https://ai-healthcare-triage.streamlit.app
+
 A multi-agent healthcare assistant built with LangGraph. It reads a user's message, decides what they need, and hands it to the right agent:
 
 - **Triage**: rates symptoms as emergency, urgent, routine or self-care, and asks follow-up questions when a message is too vague
@@ -189,11 +191,15 @@ python ingest.py
 streamlit run app.py
 ```
 
+`python ingest.py` is optional the first time: if `chroma_db/` is missing, empty or was left half-built, the app builds it on start with the same code. It prints the document count, chunk count, estimated tokens and cost first, and stops above `MAX_AUTO_INGEST_TOKENS` (2M tokens). An existing collection is reused as it is, so run `python ingest.py` yourself after changing the documents.
+
 Or chat in the terminal with `python symptomTriage.py` (type `exit` to quit).
 
 The web app shows each agent's step while a message is processed, then the reply (emergencies in red, follow-up questions in yellow), the routing and triage details with Jev's probabilities, and the conversation in the sidebar. "New conversation" starts a fresh session.
 
 > The first run downloads the BGE reranker model (about 1 GB).
+
+**Streamlit Community Cloud:** add `OPENAI_API_KEY` and `OPENROUTER_API_KEY` (plus the optional LangSmith keys) as top-level entries in the app's Secrets; Streamlit passes them to the app as environment variables, so no `.env` is needed. `chroma_db/` is not in Git, so the first start builds the knowledge base (about 1,700 chunks, roughly $0.01). The app's disk is not permanent: after a reboot or redeploy the build runs again, while reruns and page reloads on a running app reuse the existing collection.
 
 ### Knowledge base
 
@@ -213,7 +219,7 @@ python trim_health_docs.py       # converts them to Markdown in health_docs_clea
 python ingest.py                 # chunks, embeds and stores them in chroma_db/
 ```
 
-With only the included MedlinePlus files, `python ingest.py` works straight after cloning, on a smaller corpus than the one evaluated. Source choices and licensing are in [data_sourcing.md](data_sourcing.md). `ingest.py` splits on `##` headings, uses a 2,000-character window (250 overlap) for long sections, puts the document title at the start of every chunk, and stores the embeddings in a local Chroma collection (`chroma_db/`).
+With only the included MedlinePlus files, `python ingest.py` works straight after cloning, on a smaller corpus than the one evaluated. The Streamlit Community Cloud deployment uses this MedlinePlus-only corpus, since it only has the files tracked in Git; the other two sources are missing there because of their redistribution terms, not because of a ChromaDB or RAG limit. Source choices and licensing are in [data_sourcing.md](data_sourcing.md). `ingest.py` splits on `##` headings, uses a 2,000-character window (250 overlap) for long sections, puts the document title at the start of every chunk, and stores the embeddings in a local Chroma collection (`chroma_db/`).
 
 ---
 
@@ -268,7 +274,7 @@ Each eval runs the real agent on its test cases in `evaluation/test_cases/` and 
 | Scheduling | 50 | book 16, reschedule 8, cancel 8, check 8, none 10: relative dates, times in words, Hinglish, phones with +91/spaces; all five fields must be right | **48/50 (96.0%)** |
 | Knowledge | 50 | answer 34, no_info 8, no_dose 8; answers also graded with DeepEval (faithfulness and answer relevancy, gpt-4.1-mini as judge, pass at 0.7) | **46/50 (92.0%)**; retrieval hit 34/34, faithfulness 0.96, relevancy 0.94 |
 
-Router and triage use Jev; scheduling and knowledge use gpt-4o-mini. The scheduling eval tests only the LLM field extraction, so `appointments.db` is never changed. In the knowledge eval, `RUN_DEEPEVAL = False` runs only the Python checks, without judge calls.
+Router and triage use Jev; scheduling and knowledge use gpt-4o-mini. The knowledge results were measured on the full three-source corpus; the MedlinePlus-only deployment has not been evaluated separately. The scheduling eval tests only the LLM field extraction, so `appointments.db` is never changed. In the knowledge eval, `RUN_DEEPEVAL = False` runs only the Python checks, without judge calls.
 
 Known failures:
 - Router: "My dog has been vomiting since morning" → `symptom` instead of `other` (Jev: symptom 0.57, other 0.43).
@@ -340,7 +346,7 @@ Settings live in `config.py`:
 | Chunking and retrieval | `CHUNK_SIZE`, `CHUNK_OVERLAP`, `TOP_K_VECTOR`, `TOP_K_BM25`, `TOP_K_FINAL`, `RRF_K` |
 | Triage | `MAX_FOLLOW_UPS` |
 | Scheduling | `DB_PATH`, `BOOKING_DAYS`, `URGENT_HOURS`, `OPEN_HOUR`, `CLOSE_HOUR`, `SLOT_MINUTES`, `SHOW_HOURS` |
-| Storage | `DOCS_FOLDER`, `CHROMA_DIRECTORY`, `COLLECTION_NAME` |
+| Storage | `DOCS_FOLDER`, `CHROMA_DIRECTORY`, `COLLECTION_NAME`, `MAX_AUTO_INGEST_TOKENS`, `EMBEDDING_PRICE_PER_1M_TOKENS` (cost estimate only) |
 
 ---
 
@@ -350,7 +356,7 @@ Settings live in `config.py`:
 - Conversation memory lives in the running process only (`MemorySaver`) and is cleared when the process stops.
 - User messages and retrieved document text are sent to the OpenAI API to generate replies, and the conversation is sent to Jev through OpenRouter for the routing and triage decisions.
 - When LangSmith tracing is on, the same inputs and outputs are also sent to LangSmith. It is off unless `LANGSMITH_TRACING=true` is set.
-- API keys are read from `.env`, which is git-ignored; `.env.example` holds only placeholders.
+- API keys are read from `.env`, which is git-ignored (on Streamlit Community Cloud, from the app's Secrets); `.env.example` holds only placeholders.
 
 ---
 
@@ -358,7 +364,7 @@ Settings live in `config.py`:
 
 | Problem | Fix |
 |---|---|
-| `Knowledge base not found. Run python ingest.py first.` | Run `python ingest.py` (see Knowledge base above for rebuilding the full corpus) |
+| `The health knowledge base could not be built` | Check `OPENAI_API_KEY` and the app logs, then reload; or run `python ingest.py` (see Knowledge base above for rebuilding the full corpus) |
 | `sqlite3.OperationalError: table slots has no column named slot` | `appointments.db` was created by an older version; delete it and it is recreated on the next run |
 | Slow first start | The BGE reranker model (about 1 GB) downloads on first use |
 | `openai.AuthenticationError` | Check `OPENAI_API_KEY` in `.env` |

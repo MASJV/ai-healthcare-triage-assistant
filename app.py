@@ -5,9 +5,23 @@ import base64
 import streamlit as st
 from langchain_core.messages import HumanMessage
 
-from symptomTriage import app
-
 st.set_page_config(page_title="AI Healthcare Triage Assistant")
+
+# imported once per server process; on a new server the first import also
+# builds the health knowledge base (see ingest.ensure_knowledge_base)
+try:
+    with st.spinner("Starting the assistant...):
+        from symptomTriage import app
+except Exception as error:
+    if type(error).__name__ == "KnowledgeBaseError":
+        st.error(str(error))  # written in ingest.py to be safe to show
+    else:
+        print(f"App failed to start: {type(error).__name__}", flush=True)
+        st.error(
+            "The assistant could not start. Check that OPENAI_API_KEY is set "
+            "(in .env locally, or in the app's Secrets on Streamlit Community Cloud) and see the app logs."
+        )
+    st.stop()
 
 
 def set_seamless_bg_with_sidebar_border(image_file):

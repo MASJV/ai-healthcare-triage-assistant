@@ -4,7 +4,8 @@ knowledge_agent.py
 Stage: Question -> Query Expansion -> Hybrid Retrieval (Vector + BM25, fused with RRF)
        -> BGE Reranker -> Top Chunks -> LLM (config.CHAT_MODEL) -> Answer with sources
 
-Reads the Chroma collection built by ingest.py. Run `python ingest.py` first.
+Reads the Chroma collection built by ingest.py. If it is missing, it is
+built once on import (ingest.ensure_knowledge_base); `python ingest.py` rebuilds it.
 """
 
 import re
@@ -17,16 +18,15 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 
 import config
+import ingest
 from state import UserState
 
 
 openai_client = OpenAI()
 
+ingest.ensure_knowledge_base()
 chroma_client = chromadb.PersistentClient(path=config.CHROMA_DIRECTORY)
-try:
-    collection = chroma_client.get_collection(config.COLLECTION_NAME)
-except Exception:
-    raise RuntimeError("Knowledge base not found. Run `python ingest.py` first.")
+collection = chroma_client.get_collection(config.COLLECTION_NAME)
 
 stored = collection.get(include=["documents", "metadatas"])
 all_chunks = []
