@@ -175,27 +175,37 @@ if submitted and user_input.strip():
 
         start = time.perf_counter()
 
-        # per-turn fields are reset; messages and follow_ups carry over.
-        # stream() gives the output of each agent as soon as it finishes
-        for update in app.stream(
-            {
-                "user_input": user_input,
-                "messages": [HumanMessage(content=user_input)],
-                "intent": "",
-                "urgency": "",
-                "triage_reason": "",
-                "result": ""
-            },
-            session,
-            stream_mode="updates"
-        ):
-            for agent, output in update.items():
-                text = STEP_TEXT.get(agent, agent)
-                if agent == "Router Agent" and output:
-                    text += f": {output.get('intent', '')}"
-                if agent == "Triage Agent" and output:
-                    text += f": {output.get('urgency', '')}"
-                st.write(f"✔️ {text}")
+        try:
+            # per-turn fields are reset; messages and follow_ups carry over.
+            # stream() gives the output of each agent as soon as it finishes
+            for update in app.stream(
+                {
+                    "user_input": user_input,
+                    "messages": [HumanMessage(content=user_input)],
+                    "intent": "",
+                    "urgency": "",
+                    "triage_reason": "",
+                    "result": ""
+                },
+                session,
+                stream_mode="updates"
+            ):
+                for agent, output in update.items():
+                    text = STEP_TEXT.get(agent, agent)
+                    if agent == "Router Agent" and output:
+                        text += f": {output.get('intent', '')}"
+                    if agent == "Triage Agent" and output:
+                        text += f": {output.get('urgency', '')}"
+                    st.write(f"✔️ {text}")
+        except Exception as error:
+            # log only the error type: API errors can include parts of the request
+            print(f"Message failed: {type(error).__name__}", flush=True)
+            status.update(label="Something went wrong", state="error", expanded=False)
+            st.error(
+                "Sorry, something went wrong while handling that message. Please try again. "
+                "In an emergency, call 112 (emergency) or 108 (ambulance)."
+            )
+            st.stop()
 
         latency = time.perf_counter() - start
         result = app.get_state(session).values

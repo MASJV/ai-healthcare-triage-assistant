@@ -1,7 +1,7 @@
 """
 eval_scheduling.py
 
-Runs the Scheduling Agent's LLM step (read_request) on the 50 cases in
+Runs the Scheduling Agent's LLM step (read_request) on the 52 cases in
 scheduling_test_cases.py and prints the accuracy.
 
 Only read_request is called, so appointments.db is never read or changed.

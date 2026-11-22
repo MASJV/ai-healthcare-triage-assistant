@@ -11,6 +11,7 @@ date, time. Every check (slot free, opening hours, booking window,
 import re
 import sqlite3
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from langchain_core.messages import AIMessage
 from langsmith import traceable
@@ -22,6 +23,14 @@ from state import UserState, format_history
 # every slot is stored as one text value, e.g. "2026-09-29 10:30"
 # this format sorts correctly as text, so slots can be compared with < and >
 SLOT_FORMAT = "%Y-%m-%d %H:%M"
+
+
+def current_time():
+    """
+    The clinic's local time (config.TIMEZONE), whatever time zone the
+    server runs in. Slots are stored in this local time.
+    """
+    return datetime.now(ZoneInfo(config.TIMEZONE)).replace(tzinfo=None)
 
 
 #Database Setup
@@ -49,7 +58,7 @@ def create_slots(connection):
     INSERT OR IGNORE skips slots that already exist, so booked
     slots are never touched and this is safe to run every time.
     """
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = current_time().replace(hour=0, minute=0, second=0, microsecond=0)
 
     for day in range(config.BOOKING_DAYS + 1):
         slot = today + timedelta(days=day, hours=config.OPEN_HOUR)
@@ -72,7 +81,7 @@ def get_booking_window(urgency):
     Urgent cases must be seen within URGENT_HOURS, everyone else
     within BOOKING_DAYS.
     """
-    now = datetime.now()
+    now = current_time()
 
     if urgency == "urgent":
         latest = now + timedelta(hours=config.URGENT_HOURS)
@@ -123,7 +132,7 @@ def find_free_slots(connection, urgency, date=""):
     now, latest = get_booking_window(urgency)
 
     if not date:
-        next_hours = datetime.now() + timedelta(hours=config.SHOW_HOURS)
+        next_hours = current_time() + timedelta(hours=config.SHOW_HOURS)
         # slot text compares correctly, so min() picks the earlier time
         latest = min(latest, next_hours.strftime(SLOT_FORMAT))
 
@@ -167,7 +176,7 @@ def find_booking(connection, name, phone):
     Returns the patient's upcoming booked slot, or None.
     Name + phone together identify the patient.
     """
-    now = datetime.now().strftime(SLOT_FORMAT)
+    now = current_time().strftime(SLOT_FORMAT)
 
     row = connection.execute(
         """
@@ -189,15 +198,19 @@ def find_booking(connection, name, phone):
 
 #Database Changes
 def book_slot(connection, slot, name, phone, urgency):
-
-    connection.execute(
+    """
+    Books the slot only if it is still free, in one statement, so two
+    users can never book the same slot. Returns True if it was booked.
+    """
+    cursor = connection.execute(
         """
         UPDATE slots SET status = 'booked', patient_name = ?, phone = ?, urgency = ?
-        WHERE slot = ?
+        WHERE slot = ? AND status = 'free'
         """,
         (name, phone, urgency, slot)
     )
     connection.commit()
+    return cursor.rowcount == 1
 
 
 def free_slot(connection, slot):
@@ -290,7 +303,7 @@ def read_request(state):
     Asks the LLM to pull out action, name, phone, date and time from the
     conversation. It only fills in these fields; it never books anything.
     """
-    now = datetime.now()
+    now = current_time()
 
     # the next 7 days with weekday names, so the LLM does not have to
     # work out which date "Saturday" is
@@ -326,7 +339,10 @@ def read_request(state):
     Phone  - the patient's phone number as the user wrote it, or none
     Date   - the date the user wants, as YYYY-MM-DD, or none
              (turn words like "tomorrow" or "next Monday" into a date)
-    Time   - the time the user wants, as HH:MM in 24-hour format, or none
+    Time   - the time the user wants, as HH:MM in 24-hour format, or none.
+             If the user gives a time, use exactly that time, even if it is
+             not one of the listed free slots or not a valid slot. Never round
+             it or replace it with a nearby slot.
 
     For reschedule, Date and Time are the NEW date and time, never the date
     or time of the old appointment.
@@ -480,18 +496,22 @@ def scheduling_agent(state: UserState):
                     f"{urgent_note}{problem} Free slots:\n"
                     f"{list_free_slots(connection, window, date)}"
                 )
-            else:
+            # book the new slot first, so a failed booking never loses
+            # the patient's existing appointment
+            elif book_slot(connection, slot, name, phone, booking_urgency):
                 if existing:
                     free_slot(connection, existing)
-                book_slot(connection, slot, name, phone, booking_urgency)
-
-                if existing:
                     reply = f"Rescheduled: {name} moved to {format_slot(slot)}."
                 else:
                     reply = f"Booked: {name} on {format_slot(slot)}."
 
                 # booking done, forget the saved urgency
                 booking_urgency = ""
+            else:
+                reply = (
+                    f"{urgent_note}That slot was just booked by someone else. Free slots:\n"
+                    f"{list_free_slots(connection, window, date)}"
+                )
 
     connection.close()
 

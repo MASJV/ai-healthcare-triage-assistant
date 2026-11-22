@@ -1,7 +1,7 @@
 """
 scheduling_test_cases.py
 
-50 test cases for the Scheduling Agent's LLM step (read_request).
+52 test cases for the Scheduling Agent's LLM step (read_request).
 The LLM only fills in five fields; every booking rule is plain Python,
 so this checks what the LLM reads from the conversation.
 
@@ -409,5 +409,24 @@ TEST_CASES = [
         "message": "my child has had a fever for 3 days and is drinking less",
         "urgency": "urgent",
         "expected": {"action": "none", "name": "", "phone": "", "date": "", "time": ""}
+    },
+    {
+        "scenario": "invalid time repeated after the slot list",
+        "history": [
+            ("user", "book tomorrow 7:45 am, Ravi Shah 9876543210"),
+            ("assistant", "Appointments are every 30 minutes between 8:00 and 22:00. Free slots:\n"
+                          f"{(TODAY + timedelta(days=1)).strftime('%a %d %b')}: 08:00 AM, 08:30 AM, 09:00 AM")
+        ],
+        "message": "7:45 AM",
+        "expected": {"action": "book", "name": "Ravi Shah", "phone": "9876543210", "date": day(1), "time": "07:45"}
+    },
+    {
+        "scenario": "time not in the offered list",
+        "history": [
+            ("user", "I need an appointment tomorrow"),
+            ("assistant", SLOTS_REPLY)
+        ],
+        "message": "Neha Joshi, 9988776655, 6:15 pm",
+        "expected": {"action": "book", "name": "Neha Joshi", "phone": "9988776655", "date": day(1), "time": "18:15"}
     }
 ]

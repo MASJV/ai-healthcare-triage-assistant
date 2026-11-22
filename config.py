@@ -52,6 +52,7 @@ OPEN_HOUR = 8        # first slot at 8:00 AM
 CLOSE_HOUR = 22      # last slot ends at 10:00 PM
 SLOT_MINUTES = 30    # length of one appointment
 SHOW_HOURS = 24      # free slots of the next 24 hours are shown to the user
+TIMEZONE = "Asia/Kolkata"  # slot times are the clinic's local time, not the server's
 
 # --- Storage settings ---
 DOCS_FOLDER = "health_docs_clean/health_docs_clean"

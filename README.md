@@ -273,7 +273,7 @@ Each eval runs the real agent on its test cases in `evaluation/test_cases/` and 
 |---|---|---|---|
 | Router | 50 | symptom 20, health_info 7, booking 11, other 12: third person, typos, Hinglish, mental health, follow-up answers, home-care questions about a current problem, "book a flight", prompt injection | **49/50 (98.0%)** |
 | Triage | 55 | emergency 21 (20 with no red-flag keyword), urgent 11, routine 4, self_care 8, needs_more_info 11; the follow-up limit is tested too | **52/55 (94.5%)**, under-triage 1, over-triage 2 |
-| Scheduling | 50 | book 16, reschedule 8, cancel 8, check 8, none 10: relative dates, times in words, Hinglish, phones with +91/spaces; all five fields must be right | **48/50 (96.0%)** |
+| Scheduling | 52 | book 18, reschedule 8, cancel 8, check 8, none 10: relative dates, times in words, Hinglish, phones with +91/spaces, a time that is not one of the offered slots; all five fields must be right | **50/52 (96.2%)** |
 | Knowledge | 50 | answer 34, no_info 8, no_dose 8; answers also graded with DeepEval (faithfulness and answer relevancy, gpt-4.1-mini as judge, pass at 0.7) | **46/50 (92.0%)**; retrieval hit 34/34, faithfulness 0.96, relevancy 0.94 |
 
 Router and triage use Jev; scheduling and knowledge use gpt-4o-mini. The knowledge results were measured on the full three-source corpus; the MedlinePlus-only deployment has not been evaluated separately. The scheduling eval tests only the LLM field extraction, so `appointments.db` is never changed. In the knowledge eval, `RUN_DEEPEVAL = False` runs only the Python checks, without judge calls.
@@ -347,7 +347,7 @@ Settings live in `config.py`:
 | Jev | `USE_JEV`, `JEV_MODEL` (typesafe/jev-1.13), `JEV_URL`, `SYMPTOM_THRESHOLD` (0.30) |
 | Chunking and retrieval | `CHUNK_SIZE`, `CHUNK_OVERLAP`, `TOP_K_VECTOR`, `TOP_K_BM25`, `TOP_K_FINAL`, `RRF_K` |
 | Triage | `MAX_FOLLOW_UPS` |
-| Scheduling | `DB_PATH`, `BOOKING_DAYS`, `URGENT_HOURS`, `OPEN_HOUR`, `CLOSE_HOUR`, `SLOT_MINUTES`, `SHOW_HOURS` |
+| Scheduling | `DB_PATH`, `BOOKING_DAYS`, `URGENT_HOURS`, `OPEN_HOUR`, `CLOSE_HOUR`, `SLOT_MINUTES`, `SHOW_HOURS`, `TIMEZONE` |
 | Storage | `DOCS_FOLDER`, `CHROMA_DIRECTORY`, `COLLECTION_NAME`, `MAX_AUTO_INGEST_TOKENS`, `EMBEDDING_PRICE_PER_1M_TOKENS` (cost estimate only) |
 
 ---
@@ -372,7 +372,7 @@ Settings live in `config.py`:
 | `openai.AuthenticationError` | Check `OPENAI_API_KEY` in `.env` |
 | `Jev call failed ... 401 Unauthorized` | Check `OPENROUTER_API_KEY` in `.env`; gpt-4o-mini decides meanwhile |
 | Self-Care Forum or Hesperian answers missing | Only MedlinePlus is included; run `download_health_docs.py`, `trim_health_docs.py` and `ingest.py` |
-| Slot times look shifted | Slots follow the computer's local clock; check the system time zone |
+| Slot times look shifted | Slots follow `TIMEZONE` in `config.py` (Asia/Kolkata), not the server's clock; change it for another region |
 
 ---
 

@@ -50,7 +50,7 @@ FIRST_AID = [
                      "throat swelling", "tongue swelling"],
         "steps": [
             "Help them sit upright. Do not make them lie flat.",
-            "Loosen tight clothing.",
+            "Loosen tight clothing around the neck and chest.",
             "If they have their own inhaler or adrenaline pen, help them use it."
         ]
     },
@@ -220,7 +220,10 @@ def find_first_aid_steps(categories):
 
     for emergency in FIRST_AID:
         if emergency["category"] in categories:
-            matched_steps.extend(emergency["steps"])
+            for step in emergency["steps"]:
+                # two matched types can share a step; show it once
+                if step not in matched_steps:
+                    matched_steps.append(step)
 
     return matched_steps
 
