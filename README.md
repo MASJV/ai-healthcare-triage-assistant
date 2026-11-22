@@ -196,7 +196,7 @@ streamlit run app.py
 
 `python ingest.py` is optional the first time: if `chroma_db/` is missing, empty or was left half-built, the app builds it on start with the same code. It prints the document count, chunk count, estimated tokens and cost first, and stops above `MAX_AUTO_INGEST_TOKENS` (2M tokens). An existing collection is reused as it is, so run `python ingest.py` yourself after changing the documents.
 
-Or chat in the terminal with `python symptomTriage.py` (type `exit` to quit).
+Or chat in the terminal with `python graph.py` (type `exit` to quit).
 
 The web app shows each agent's step while a message is processed, then the reply (emergencies in red, follow-up questions in yellow), the routing and triage details with Jev's probabilities, and the conversation in the sidebar. "New conversation" starts a fresh session.
 
@@ -324,7 +324,7 @@ Source: *CARE-Bench: Benchmarking Patient-Facing LLM Triage*, 2026. [arXiv:2608.
 
 ## Tracing, Latency and Cost
 
-With LangSmith turned on (see Setup), every chat turn is traced as one run named `symptom-triage-scheduler`. LangGraph records each agent node and LangChain records each LLM call; the steps outside LangChain (Jev requests, the keyword filter, retrieval steps, first-aid matching, slot listing) are wrapped with `@traceable`.
+With LangSmith turned on (see Setup), every chat turn is traced as one run named `ai-healthcare-triage-assistant` in the `LANGSMITH_PROJECT` project. LangGraph records each agent node and LangChain records each LLM call; the steps outside LangChain (Jev requests, the keyword filter, retrieval steps, first-aid matching, slot listing) are wrapped with `@traceable`.
 
 Latency is measured in code, so it works without LangSmith: the router, triage and CARE-Bench evals print the average, median, 95th percentile and slowest call, and the web app shows `latency_seconds` for each message. With Jev, the median decision takes 0.62 s in the router and 0.71 s in triage. Paths that also run retrieval and an LLM answer (self-care, health questions) take longer end to end.
 

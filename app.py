@@ -11,7 +11,7 @@ st.set_page_config(page_title="AI Healthcare Triage Assistant")
 # builds the health knowledge base (see ingest.ensure_knowledge_base)
 try:
     with st.spinner("Starting the assistant..."):
-        from symptomTriage import app
+        from graph import app
 except Exception as error:
     if type(error).__name__ == "KnowledgeBaseError":
         st.error(str(error))  # written in ingest.py to be safe to show
@@ -170,7 +170,7 @@ if submitted and user_input.strip():
         # run_name labels each turn in LangSmith when tracing is on
         session = {
             "configurable": {"thread_id": st.session_state.thread_id},
-            "run_name": "symptom-triage-scheduler"
+            "run_name": "ai-healthcare-triage-assistant"
         }
 
         start = time.perf_counter()

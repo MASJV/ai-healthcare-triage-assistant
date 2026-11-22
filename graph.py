@@ -61,7 +61,7 @@ if __name__ == "__main__":
     # run_name labels each turn in LangSmith when tracing is on
     session = {
         "configurable": {"thread_id": str(uuid.uuid4())},
-        "run_name": "symptom-triage-scheduler"
+        "run_name": "ai-healthcare-triage-assistant"
     }
 
     while True:

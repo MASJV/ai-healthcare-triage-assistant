@@ -13,7 +13,7 @@ class UserState(TypedDict):
     urgency: str
     triage_reason: str
     triage_probabilities: dict   # Jev's probability for each level (empty without Jev)
-    symptom_text: str      # the user's messages triage judged as self_care
+    symptom_text: str      # the user's messages about the problem triage last judged
     follow_ups: int  
     booking_urgency: str   # urgency kept until the booking is done
     result: str
