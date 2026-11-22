@@ -48,6 +48,7 @@ flowchart TD
     R -->|health_info| K[Knowledge Agent]
     R -->|booking| S[Scheduling Agent]
     R -->|other| E1([End: redirect reply])
+    R -->|declined_booking| K
 
     T -->|emergency| X[Escalation Agent]
     T -->|urgent / routine| S
@@ -78,6 +79,7 @@ All agents share one state (`UserState`). A LangGraph `MemorySaver` checkpointer
 - Red-flag keyword messages are routed by Jev too, so a prevention question such as "how do I lower my risk of a heart attack?" can go to `health_info`; a real red-flag symptom still reaches triage, which checks the keywords.
 - If a Jev call fails (error or 10-second timeout), gpt-4o-mini decides instead, with a red-flag keyword match sending the message to triage before the LLM call.
 - `other` gets a short reply explaining what the assistant can help with.
+- While an offered appointment is not booked yet, a short gpt-4o-mini check runs first: a reply that turns it down or says the user will manage at home, with no new symptom or red-flag keyword, becomes `declined_booking` and goes to the Knowledge Agent instead of triage, so it is not judged as a new problem. The urgency is kept, so a later "ok, book it" keeps the 48-hour rule for urgent cases.
 
 ### Triage Agent (`agents/triage_agent.py`)
 Two layers:
@@ -116,6 +118,7 @@ search query ─┬─> vector search (Chroma, text-embedding-3-small, 1536 dims
 - It gives no diagnosis, no prescription medicines and no dose of any medicine (over-the-counter included), and it replaces UK emergency numbers with Indian ones (112/108).
 - A check in code backs up the prompt: any sentence that still contains a medicine dose (tablets, capsules, drops, or mg/ml next to a medicine name) is removed and replaced with a line to ask a doctor or pharmacist. Food and drink amounts such as "2,000 ml of water" are left alone.
 - Every answer ends with a when-to-see-a-doctor line, a fixed disclaimer added in code, and the source titles with URLs.
+- After `declined_booking`, it searches with the user's messages about the problem, like the `self_care` path, and the answer opens with a line that seeing a doctor is still advised.
 
 ### Scheduling Agent (`agents/scheduling_agent.py`)
 - The LLM only extracts five fields from the conversation: action (book / reschedule / cancel / check / none), full name, phone, date and time. It gets today's date and the dates of the next 7 days, so it can turn words like "tomorrow" or "Friday" into real dates.
@@ -327,7 +330,7 @@ Latency is measured in code, so it works without LangSmith: the router, triage a
 
 | Path | Calls per message |
 |---|---|
-| Router | 1 Jev call |
+| Router | 1 Jev call, plus 1 small chat call while an offered appointment is not booked yet |
 | Triage | 0 if a red-flag keyword matches, otherwise 1 Jev call, plus 1 chat call when it asks a follow-up question |
 | Escalation | 1 small chat call (category matching) |
 | Knowledge | 1 small chat call (query expansion) + 1 embedding call + 1 chat call |

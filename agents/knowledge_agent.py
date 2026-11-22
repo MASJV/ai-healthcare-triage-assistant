@@ -242,6 +242,12 @@ SELF_CARE_LINE = (
     "If it gets worse or new symptoms appear, tell me and I can help you book an appointment."
 )
 
+# opening line when the user turned down the appointment triage recommended
+DECLINED_BOOKING_LINE = (
+    "Seeing a doctor is still advised for this. If you change your mind, tell me "
+    "and I can book a slot. Meanwhile, here is general self-care information:"
+)
+
 # a number (or ½, ¼, ¾) followed by a unit that is always a medicine dose, e.g. "2 tablets", "½ tablet"
 MEDICINE_UNIT_PATTERN = r"(\d+(\.\d+)?|½|¼|¾)\s*(tablets?|capsules?|pills?|drops)\b"
 
@@ -300,10 +306,12 @@ def remove_doses(answer):
 #Knowledge Agent
 def knowledge_agent(state: UserState):
 
-    # triage sent this here as self_care: search with all the user's messages
-    # about the problem, not only the last answer to a follow-up question
+    # triage sent this here as self_care, or the user turned down the
+    # appointment triage recommended: search with all the user's messages
+    # about the problem, not only the latest message
     from_triage = state.get("urgency", "") == "self_care"
-    if from_triage and state.get("symptom_text"):
+    declined_booking = state.get("intent", "") == "declined_booking"
+    if (from_triage or declined_booking) and state.get("symptom_text"):
         question = state["symptom_text"]
     else:
         question = state["user_input"]
@@ -359,6 +367,8 @@ def knowledge_agent(state: UserState):
 
     if from_triage:
         answer_text = f"{SELF_CARE_LINE}\n\n{answer_text}"
+    elif declined_booking:
+        answer_text = f"{DECLINED_BOOKING_LINE}\n\n{answer_text}"
 
     answer = f"{answer_text}\n\n{DISCLAIMER}\n\nSources:\n{sources}"
 

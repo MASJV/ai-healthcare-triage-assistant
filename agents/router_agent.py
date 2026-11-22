@@ -99,6 +99,30 @@ def classify_with_jev(messages, user_input):
     return intent, probabilities
 
 
+def is_declined_booking(state):
+    """
+    An appointment was offered and not booked yet (booking_urgency is set).
+    True if the user turns it down or says they will manage at home, with no
+    new or changed symptom. Such a reply is not a new problem for triage.
+    """
+    prompt = f"""
+    The assistant offered the user a doctor's appointment.
+
+    Assistant's last message: {last_assistant_message(state["messages"][:-1])}
+
+    Latest User Message: {state['user_input']}
+
+    Reply decline if the user turns down the appointment or says they will
+    manage at home, rest or not now, and mentions no new or changed symptom.
+    Otherwise reply other.
+
+    Reply with only the word, nothing else.
+    """
+
+    response = llm.invoke(prompt)
+    return response.content.strip().lower() == "decline"
+
+
 def classify_with_llm(history, user_input):
 
     prompt = f"""
@@ -157,6 +181,16 @@ def classify_with_llm(history, user_input):
 
 #Router Agent
 def router_agent(state: UserState):
+
+    # an offered appointment is waiting: "no thanks" or "I'll treat it at home"
+    # answers that offer, so it is not sent to triage as a new problem.
+    # booking_urgency is kept, so a later "ok, book it" keeps the level
+    if state.get("booking_urgency") and check_red_flags(state["user_input"]) is None:
+        if is_declined_booking(state):
+            return {
+                "intent": "declined_booking",
+                "router_probabilities": {}
+            }
 
     # red-flag symptoms always go through triage, so no LLM call is needed.
     # With Jev, the router decides these too, so a prevention question
