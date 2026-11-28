@@ -32,7 +32,7 @@ The router labels were checked against the new rule after the first v2 run: 4 ho
 
 Effect on CARE-Bench: urgent false negatives fell from 9/26 to 5/26 and under-escalation from 13 to 9, with accuracy and macro-F1 up. The 5 left were all rated `urgent`: a child falling asleep after sudden vertigo, flashes of light in one eye, and dull side pain in pregnancy.
 
-Held-out status: this change was prompted by the v2 urgent false negatives, so CARE-Bench is not fully held-out from v3 on. The wording uses general categories rather than the case details. CARE-Bench was frozen after the v3 run and is reported as a safety stress test from then on.
+Held-out status: v2 was prompted by v1's CARE-Bench misses (serious symptoms phrased as home-care questions, also seen on Semigran) and this change by the v2 urgent false negatives, so CARE-Bench is not fully held-out from v2 on. Both changes use general categories rather than the case details. CARE-Bench was frozen after the v3 run and is reported as a safety stress test from then on.
 
 The triage labels were also checked against the v3 level definitions: "can barely keep water down" and high blood sugar with thirst need same-day care, which `urgent` (24–48 hours) is too slow for, so they became `emergency`; a small painless wart became `self_care`.
 

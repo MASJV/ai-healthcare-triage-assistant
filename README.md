@@ -289,7 +289,7 @@ Known failures:
 
 ### External validation (CARE-Bench)
 
-`eval_care_bench.py` runs CARE-Bench Public Test 1 (62 cases, 135 labelled prefixes) from `evaluation/care_bench/`. The cases are patient messages in everyday, first-person language, 1 to 3 rounds each, built from real medical dialogue sources and human-reviewed. No public dataset matches this app's workflows exactly; CARE-Bench is the closest fit because its "ask for more information" label tests follow-up questions. It is used for testing only, and prompts are not changed to fit it.
+`eval_care_bench.py` runs CARE-Bench Public Test 1 (62 cases, 135 labelled prefixes) from `evaluation/care_bench/`. The cases are patient messages in everyday, first-person language, 1 to 3 rounds each, built from real medical dialogue sources and human-reviewed. No public dataset matches this app's workflows exactly; CARE-Bench is the closest fit because its "ask for more information" label tests follow-up questions. Its results guided the v2 and v3 changes, which use general categories, never the wording of its cases; it was frozen after the v3 run.
 
 Each prefix goes through the app's path (Router Agent, then Triage Agent for symptoms), and the output is mapped to a CARE-Bench label:
 
